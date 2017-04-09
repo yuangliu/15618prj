@@ -1,10 +1,3 @@
----
-layout: page
-title: LSTM "Scheduler"
-tagline: DSL for LSTM
-description: Proposal
----
-
 Yuang Liu (yuangl) and Shuyao Bi (shuyaob)
 
 # Proposal
