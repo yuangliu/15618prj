@@ -1,13 +1,4 @@
 theme: jekyll-theme-hacker
-
-# Themes are encouraged to use these universal variables
-# so be sure to set them if your theme uses them.
-#
 title : LSTM "Scheduler"
-author :
-  name : Yuang Liu
-  email : liuyuang1994@gmail.com
-  github : yuangliu
-  feedburner : nil
-
-markdown: kramdown
+tagline: DSL for LSTM
+description: Proposal
