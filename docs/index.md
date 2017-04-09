@@ -23,7 +23,7 @@ The training for LSTM involves a series of matrix-matrix multiplications (GEMMs)
 - Describe the workload: what are the dependencies, what are its memory access characteristics? (is there locality? is there a high communication to computation ratio?), is there divergent execution?
 - Describe constraints: What are the properties of the system that make mapping the workload to it challenging?
 -->
-
+LSTM has many variants with different network structures and fomulars. Finding a generic solution to parallize all variants of LSTM is difficult.
 ## Resources
 <!--Describe the resources (type of computers, starter code, etc.) you will use. What code base will you start from? Are you starting from scratch or using an existing piece of code? Is there a book or paper that you are using as a reference (if so, provide a citation)? Are there any other resources you need, but haven't figured out how to obtain yet? Could you benefit from access to any special machines?-->
 
@@ -37,7 +37,7 @@ Probably start with [CUDA code optimized for LSTM](https://github.com/parallel-f
 <!--Describe why the platform (computer and/or language) you have chosen is a good one for your needs. Why does it make sense to use this parallel system for the workload you have chosen?-->
 
 CUDA.  
-Why?
+The parallelism of  matrix-matrix multiplications (GEMMs) and  point-wise operationswithin each LSTM cell can be parallelized naturally with CUDA. Also, NVIDIA Deep Learning SDK provides powerful tool (e.g. cuDNN, cnBLAS) that can accelerate operations for linear algebra and neural network.
 
 ## Schedule
 <!--Produce a schedule for your project. Your schedule should have at least one item to do per week. List what you plan to get done each week from now until the parallelism competition in order to meet your project goals. Keep in mind that due to other classes, you'll have more time to work some weeks than others (work that into the schedule). You will need to re-evaluate your progress at the end of each week and update this schedule accordingly. Note the intermediate checkpoint deadline is April 25th. In your schedule we encourage you to be precise as precise as possible. It's often helpful to work backward in time from your deliverables and goals, writing down all the little things you'll need to do (establish the dependencies!).-->
