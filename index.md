@@ -1,37 +1,24 @@
-## Welcome to GitHub Pages
+# LSTM "Scheduler"
+Yuang Liu (yuangl) and Shuyao Bi (shuyaob)
 
-You can use the [editor on GitHub](https://github.com/yuangliu/418prj/edit/master/index.md) to maintain and preview the content for your website in Markdown files.
+## Proposal
 
-Whenever you commit to this repository, GitHub Pages will run [Jekyll](https://jekyllrb.com/) to rebuild the pages in your site, from the content in your Markdown files.
+### Summary
+We are going to implement a Domain-Specific Language (DSL) for defining Long Short-Term Memory (LSTM). The DSL will be able to generate CUDA code based from Python, making use of cuDNN or cuBLAS. By developing a series of scheduling mechanisms, it will support efficient execution for different LSTM variants.
 
-### Markdown
-
-Markdown is a lightweight and easy-to-use syntax for styling your writing. It includes conventions for
-
-```markdown
-Syntax highlighted code block
-
-# Header 1
-## Header 2
-### Header 3
-
-- Bulleted
-- List
-
-1. Numbered
-2. List
-
-**Bold** and _Italic_ and `Code` text
-
-[Link](url) and ![Image](src)
-```
-
-For more details see [GitHub Flavored Markdown](https://guides.github.com/features/mastering-markdown/).
-
-### Jekyll Themes
-
-Your Pages site will use the layout and styles from the Jekyll theme you have selected in your [repository settings](https://github.com/yuangliu/418prj/settings). The name of this theme is saved in the Jekyll `_config.yml` configuration file.
-
-### Support or Contact
-
-Having trouble with Pages? Check out our [documentation](https://help.github.com/categories/github-pages-basics/) or [contact support](https://github.com/contact) and we’ll help you sort it out.
+### Background
+### Challenges
+### Resources
+### Goals and Deliverables
+### Platform
+### Schedule
+| Week        | Plan           | Note  |
+| ------------- |:-------------:| -----:|
+| Apr 9      |  |  |
+| Apr 16      |       |    |
+| Apr 23 |       |     |
+| Apr 30      |       |    |
+| May 7 |       |     |
+### References
+- Christopher Olah, Understanding LSTM Networks. [Link](http://colah.github.io/posts/2015-08-Understanding-LSTMs/)
+- Klaus Greff, Rupesh K. Srivastava, Jan Koutník, Bas R. Steunebrink, and Jürgen Schmidhuber. "LSTM: A search space odyssey." IEEE transactions on neural networks and learning systems (2016). [PDF](https://arxiv.org/pdf/1503.04069.pdf)
