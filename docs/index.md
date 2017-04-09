@@ -13,7 +13,7 @@ As a recurrent neural network (RNN) architecture, Long short-term memory (LSTM) 
 **Figure 1:** *The chain of LSTM blocks consisting of  four LSTM units.*
 
 Despite similar ideas, different LSTM variants have individual network structures and formulas. Common variants include vanilla LSTM [[Graves 2005](http://www.sciencedirect.com/science/article/pii/S0893608005001206)], traditional LSTM [[Hochreiter 1997](http://www.mitpressjournals.org/doi/abs/10.1162/neco.1997.9.8.1735)], Peephole LSTM [[Gers 2000](http://ieeexplore.ieee.org/abstract/document/861302/)], etc. The following formula shows the operations for traditional LSTM.  
-<img src="https://wikimedia.org/api/rest_v1/media/math/render/svg/2db2cba6a0d878e13932fa27ce6f3fb71ad99cf1" style="background-color:#90a959;"/>  
+![eqn](http://www.sciweavers.org/upload/Tex2Img_1491768305/eqn.png)
 
 The training for LSTM involves a series of matrix-matrix multiplications (GEMMs) and lots of point-wise operations on vectors.  Therefore, it is both necessary and natural to execute it in parallel. However, writing efficient CUDA code is troublesome for some users and maching learning researchers. Our goal is develop a Python library that generates CUDA code automatically. By identifying the pattern of LSTM variants, our library could schedule them with different schemes, and achieve a good performance in most cases.
 
