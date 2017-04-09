@@ -7,15 +7,12 @@ We are going to implement a Domain-Specific Language (DSL) for defining Long Sho
 
 ## Background
 <!--If your project involves accelerating a compute-intensive application, describe the application or piece of the application you are going to implement in more detail. This description need only be a few paragraphs. It might be helpful to include a block diagram or pseudocode of the basic idea. An important detail is what aspects of the problem might benefit from parallelism? and why?-->
-As a recurrent neural network (RNN) architecture, Long short-term memory (LSTM) is excel at learning from past experience to classify, process, and predict time series. The LSTM units are able to remember values for either long or short durations of time, due to no activation function within the recurrent components. Containing several LSTM units, a LSTM block contains three or four "gates" controlling the flow of information.  $W$
-![LSTM chains](http://colah.github.io/posts/2015-08-Understanding-LSTMs/img/LSTM3-chain.png)
-(E=mc^2)，$$x_{1,2} = \frac{-b \pm \sqrt{b^2-4ac}}{2b}.$$
+As a recurrent neural network (RNN) architecture, Long short-term memory (LSTM) is excel at learning from past experience to classify, process, and predict time series. The LSTM units are able to remember values for either long or short durations of time, due to no activation function within the recurrent components. Containing several LSTM units, a LSTM block contains three or four "gates" controlling the flow of information. Figure 1 shows the chain of repeating LSTM blocks with four LSTM units.
 
-**Theorem**: The translation $[\![e]\!]$ given by
+<span style="background-color:#90a959"> ![LSTM chains](http://colah.github.io/posts/2015-08-Understanding-LSTMs/img/LSTM3-chain.png) </span>
+**Figure 1:** *The repeating module in an LSTM contains four interacting layers.*
 
-Let $\text{S}_1(N) = \sum_{p=1}^N \text{E}(p)$
-
-
+Despite similar idea, different LSTM variants have individual network structures and formulas. Common variants include vanilla LSTM [[Graves 2005](http://www.sciencedirect.com/science/article/pii/S0893608005001206)], traditional LSTM [[Hochreiter 1997](http://www.mitpressjournals.org/doi/abs/10.1162/neco.1997.9.8.1735)], Peephole LSTM [[Gers 2000](http://ieeexplore.ieee.org/abstract/document/861302/)], etc.
 
 ## Challenges
 <!--Describe why the problem is challenging. What aspects of the problem might make it difficult to parallelize? In other words, what to you hope to learn by doing the project?
