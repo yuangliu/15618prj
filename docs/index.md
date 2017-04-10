@@ -32,15 +32,15 @@ Probably start with [CUDA code optimized for LSTM](https://github.com/parallel-f
 
 ## Goals and Deliverables
 <!--Describe the deliverables or goals of your project.-->
-> Plan to achieve:
->>Implement python-based DSL that can schedule LSTM tasks on GPU and ensures correctness and efficiency.
->>Identify primitives that can provide generic performance speedup for all variants of LSTM models.
->>Implement LSTM with NVIDIA Deep Learning SDK (e.g. cuDNN, cnBLAS) which acts as the baseline of evaluation. 
->>Evaluate implementations for LSTM variants on LSTM benchmark problems (e.g. acoustic modeling, handwriting recognition and polyphinic music modeling).
+### Plan to achieve:
+* Implement python-based DSL that can schedule LSTM tasks on GPU and ensures correctness and efficiency.
+* Identify primitives that can provide generic performance speedup for all variants of LSTM models.
+* Implement LSTM with NVIDIA Deep Learning SDK (e.g. cuDNN, cnBLAS) which acts as the baseline of evaluation. 
+* Evaluate implementations for LSTM variants on LSTM benchmark problems (e.g. acoustic modeling, handwriting recognition and polyphinic music modeling).
 
->Hope to achieve:
->>Provide user-friendly interface.
->>Achieve comparable implementation with Tensorflow and Theano.
+### Hope to achieve:
+* Provide user-friendly interface.
+* Achieve comparable implementation with Tensorflow and Theano.
 ## Platform
 <!--Describe why the platform (computer and/or language) you have chosen is a good one for your needs. Why does it make sense to use this parallel system for the workload you have chosen?-->
 
