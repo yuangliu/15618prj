@@ -23,7 +23,8 @@ The training for LSTM involves a series of matrix-matrix multiplications (GEMMs)
 - Describe the workload: what are the dependencies, what are its memory access characteristics? (is there locality? is there a high communication to computation ratio?), is there divergent execution?
 - Describe constraints: What are the properties of the system that make mapping the workload to it challenging?
 -->
-LSTM has many variants with different network structures and fomulars. Finding a generic solution to parallize all variants of LSTM is difficult.
+* LSTM training involves multiple layers each with multiple iterations performed in a cell. In each iteration, GEMMs needs to be performed with input from former iteration and former layer. After GEMMs are finished, point-wise operations are performed. Since there're dependency between work within iteration, between iterations and between multiple, exploiting parallism that can fully utilize hardware while maintaining the dependency is challenging.
+* LSTM has many variants with different network structures and fomulars. Finding a generic solution to parallize all variants of LSTM is difficult.
 ## Resources
 <!--Describe the resources (type of computers, starter code, etc.) you will use. What code base will you start from? Are you starting from scratch or using an existing piece of code? Is there a book or paper that you are using as a reference (if so, provide a citation)? Are there any other resources you need, but haven't figured out how to obtain yet? Could you benefit from access to any special machines?-->
 
