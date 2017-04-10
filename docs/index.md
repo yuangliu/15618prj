@@ -32,12 +32,20 @@ Probably start with [CUDA code optimized for LSTM](https://github.com/parallel-f
 
 ## Goals and Deliverables
 <!--Describe the deliverables or goals of your project.-->
+Plan to achieve:
+Implement python-based DSL that can schedule LSTM tasks on GPU and ensures correctness and efficiency.
+Identify primitives that can provide generic performance speedup for all variants of LSTM models.
+Implement LSTM with NVIDIA Deep Learning SDK (e.g. cuDNN, cnBLAS) which acts as the baseline of evaluation. 
+Evaluate implementations for LSTM variants on LSTM benchmark problems (e.g. acoustic modeling, handwriting recognition and polyphinic music modeling).
 
+Hope to achieve:
+Provide user-friendly interface.
+Achieve comparable implementation with Tensorflow and Theano.
 ## Platform
 <!--Describe why the platform (computer and/or language) you have chosen is a good one for your needs. Why does it make sense to use this parallel system for the workload you have chosen?-->
 
 CUDA.  
-The parallelism of  matrix-matrix multiplications (GEMMs) and  point-wise operationswithin each LSTM cell can be parallelized naturally with CUDA. Also, NVIDIA Deep Learning SDK provides powerful tool (e.g. cuDNN, cnBLAS) that can accelerate operations for linear algebra and neural network.
+The parallelism of  matrix-matrix multiplications (GEMMs) and  point-wise operationswithin each LSTM cell can be parallelized naturally and achieve high-performance on GPU. 
 
 ## Schedule
 <!--Produce a schedule for your project. Your schedule should have at least one item to do per week. List what you plan to get done each week from now until the parallelism competition in order to meet your project goals. Keep in mind that due to other classes, you'll have more time to work some weeks than others (work that into the schedule). You will need to re-evaluate your progress at the end of each week and update this schedule accordingly. Note the intermediate checkpoint deadline is April 25th. In your schedule we encourage you to be precise as precise as possible. It's often helpful to work backward in time from your deliverables and goals, writing down all the little things you'll need to do (establish the dependencies!).-->
