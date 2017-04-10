@@ -26,6 +26,7 @@ The training for LSTM involves a series of matrix-matrix multiplications (GEMMs)
 * LSTM training involves multiple layers each with multiple iterations performed in a cell. In each iteration, GEMMs needs to be performed with input from former iteration and former layer. After GEMMs are finished, point-wise operations are performed. Since there exist dependency between tasks within iteration, between iterations and between layers, exploiting parallism that can fully utilize hardware resources while maintaining the dependency and correctness is challenging.
 * The output of one iteration will be used as the input of the next iteration which can generate a lot of communication between kernel and device memory. 
 * LSTM has many variants with different network structures and fomulars. Identifying and Finding a generic solution to parallizing all variants of LSTM is difficult.
+
 ## Resources
 <!--Describe the resources (type of computers, starter code, etc.) you will use. What code base will you start from? Are you starting from scratch or using an existing piece of code? Is there a book or paper that you are using as a reference (if so, provide a citation)? Are there any other resources you need, but haven't figured out how to obtain yet? Could you benefit from access to any special machines?-->
 
@@ -45,6 +46,7 @@ The training for LSTM involves a series of matrix-matrix multiplications (GEMMs)
 ### Hope to achieve:
 * Provide user-friendly interface.
 * Achieve comparable implementation with Tensorflow and Theano.
+
 ## Platform
 <!--Describe why the platform (computer and/or language) you have chosen is a good one for your needs. Why does it make sense to use this parallel system for the workload you have chosen?-->
 
