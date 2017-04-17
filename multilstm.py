@@ -2,6 +2,7 @@ import random
 
 import numpy as np
 import math
+import copy
 
 def sigmoid(x): 
     return 1. / (1 + np.exp(-x))
@@ -103,6 +104,9 @@ class LstmNode:
     
     def top_diff_is(self, top_diff_h, top_diff_s):
         # notice that top_diff_s is carried along the constant error carousel
+        #print top_diff_h
+        #print top_diff_s
+        #print '---------------'
         ds = self.state.o * top_diff_h + top_diff_s
         do = self.state.s * top_diff_h
         di = self.state.g * ds
@@ -135,12 +139,24 @@ class LstmNode:
         # save bottom diffs
         self.state.bottom_diff_s = ds * self.state.f
         self.state.bottom_diff_h = dxc[self.param.x_dim:]
-        self.state.bottom_diff_x = dxc[:self.param.x_dim]
+        self.param.x_diff = dxc[:self.param.x_dim]
+
+        # print 'wi_diff'
+        # print self.param.wi_diff
+        # print 'wg_diff'
+        # print self.param.wg_diff
+        # print 'diff_x'
+        #print self.state.bottom_diff_x
+        # print '---------------'
 
 class LstmNetwork():
-    def __init__(self, lstm_param, lstm_param_hidden):
+    def __init__(self, lstm_param, lstm_hidden_param = None, level = 0):
         self.lstm_param = lstm_param
-        self.lstm_hidden_param = lstm_param_hidden
+        self.lstm_hidden_param = lstm_hidden_param
+
+        #self.lstm_hidden_param = [copy.deepcopy(lstm_param_hidden) for x in range(level)]
+        #print [id(x) for x in xx]
+        #print level
         self.lstm_hidden_node_list = []
         self.lstm_node_list = []
         # input sequence
@@ -159,7 +175,7 @@ class LstmNetwork():
         loss = loss_layer.loss(self.lstm_hidden_node_list[idx].state.h, y_list[idx])
         diff_h = loss_layer.bottom_diff(self.lstm_hidden_node_list[idx].state.h, y_list[idx])
         # here s is not affecting loss due to h(t+1), hence we set equal to zero
-        diff_s = np.zeros(self.lstm_param.mem_cell_ct)
+        diff_s = np.zeros(self.lstm_hidden_param.mem_cell_ct)
         self.lstm_hidden_node_list[idx].top_diff_is(diff_h, diff_s)
         idx -= 1
 
@@ -197,7 +213,7 @@ class LstmNetwork():
 
     def x_list_add(self, x):
         self.x_list.append(x)
-        if len(self.x_list) > len(self.lstm_hidden_node_list):
+        if len(self.x_list) > len(self.lstm_node_list):
             # need to add new lstm node, create new state mem
             lstm_state = LstmState(self.lstm_param.mem_cell_ct, self.lstm_param.x_dim)
             self.lstm_node_list.append(LstmNode(self.lstm_param, lstm_state))
@@ -217,3 +233,7 @@ class LstmNetwork():
             s_prev = self.lstm_hidden_node_list[idx - 1].state.s
             h_prev = self.lstm_hidden_node_list[idx - 1].state.h
             self.lstm_hidden_node_list[idx].bottom_data_is(self.lstm_node_list[idx].state.h, s_prev, h_prev)
+
+    def apply_diff(self, lr = 0.1, lr_hidden = 0.1):
+        self.lstm_param.apply_diff(lr)
+        self.lstm_hidden_param.apply_diff(lr_hidden)
