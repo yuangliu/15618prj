@@ -138,10 +138,11 @@ class LstmNode:
         self.state.bottom_diff_x = dxc[:self.param.x_dim]
 
 class LstmNetwork():
-    def __init__(self, lstm_param):
+    def __init__(self, lstm_param, lstm_param_hidden):
         self.lstm_param = lstm_param
-        self.lstm_node_list = []
+        self.lstm_hidden_param = lstm_param_hidden
         self.lstm_hidden_node_list = []
+        self.lstm_node_list = []
         # input sequence
         self.x_list = []
 
@@ -155,26 +156,8 @@ class LstmNetwork():
         assert len(y_list) == len(self.x_list)
         idx = len(self.x_list) - 1
         # first node only gets diffs from label ...
-        loss = loss_layer.loss(self.lstm_node_list[idx].state.h, y_list[idx])
-        diff_h = loss_layer.bottom_diff(self.lstm_node_list[idx].state.h, y_list[idx])
-        # here s is not affecting loss due to h(t+1), hence we set equal to zero
-        diff_s = np.zeros(self.lstm_param.mem_cell_ct)
-        self.lstm_node_list[idx].top_diff_is(diff_h, diff_s)
-        idx -= 1
-
-        ### ... following nodes also get diffs from next nodes, hence we add diffs to diff_h
-        ### we also propagate error along constant error carousel using diff_s
-        while idx >= 0:
-            loss += loss_layer.loss(self.lstm_node_list[idx].state.h, y_list[idx])
-            diff_h = loss_layer.bottom_diff(self.lstm_node_list[idx].state.h, y_list[idx])
-            diff_h += self.lstm_node_list[idx + 1].state.bottom_diff_h
-            diff_s = self.lstm_node_list[idx + 1].state.bottom_diff_s
-            self.lstm_node_list[idx].top_diff_is(diff_h, diff_s)
-            idx -= 1 
-
-        idx = len(self.x_list) - 1
-        # first node only gets diffs from label ...
-        diff_h = self.lstm_node_list[idx].param.x_diff
+        loss = loss_layer.loss(self.lstm_hidden_node_list[idx].state.h, y_list[idx])
+        diff_h = loss_layer.bottom_diff(self.lstm_hidden_node_list[idx].state.h, y_list[idx])
         # here s is not affecting loss due to h(t+1), hence we set equal to zero
         diff_s = np.zeros(self.lstm_param.mem_cell_ct)
         self.lstm_hidden_node_list[idx].top_diff_is(diff_h, diff_s)
@@ -183,10 +166,28 @@ class LstmNetwork():
         ### ... following nodes also get diffs from next nodes, hence we add diffs to diff_h
         ### we also propagate error along constant error carousel using diff_s
         while idx >= 0:
-            diff_h = self.lstm_node_list[idx].param.x_diff
+            loss += loss_layer.loss(self.lstm_hidden_node_list[idx].state.h, y_list[idx])
+            diff_h = loss_layer.bottom_diff(self.lstm_hidden_node_list[idx].state.h, y_list[idx])
             diff_h += self.lstm_hidden_node_list[idx + 1].state.bottom_diff_h
             diff_s = self.lstm_hidden_node_list[idx + 1].state.bottom_diff_s
             self.lstm_hidden_node_list[idx].top_diff_is(diff_h, diff_s)
+            idx -= 1 
+
+        idx = len(self.x_list) - 1
+        # first node only gets diffs from label ...
+        diff_h = self.lstm_hidden_node_list[idx].param.x_diff
+        # here s is not affecting loss due to h(t+1), hence we set equal to zero
+        diff_s = np.zeros(self.lstm_param.mem_cell_ct)
+        self.lstm_node_list[idx].top_diff_is(diff_h, diff_s)
+        idx -= 1
+
+        ### ... following nodes also get diffs from next nodes, hence we add diffs to diff_h
+        ### we also propagate error along constant error carousel using diff_s
+        while idx >= 0:
+            diff_h = self.lstm_hidden_node_list[idx].param.x_diff
+            diff_h += self.lstm_node_list[idx + 1].state.bottom_diff_h
+            diff_s = self.lstm_node_list[idx + 1].state.bottom_diff_s
+            self.lstm_node_list[idx].top_diff_is(diff_h, diff_s)
             idx -= 1 
 
         return loss
@@ -196,23 +197,23 @@ class LstmNetwork():
 
     def x_list_add(self, x):
         self.x_list.append(x)
-        if len(self.x_list) > len(self.lstm_node_list):
+        if len(self.x_list) > len(self.lstm_hidden_node_list):
             # need to add new lstm node, create new state mem
             lstm_state = LstmState(self.lstm_param.mem_cell_ct, self.lstm_param.x_dim)
-            self.lstm_hidden_node_list.append(LstmNode(self.lstm_param, lstm_state))
-            lstm_state = LstmState(self.lstm_param.mem_cell_ct, self.lstm_param.mem_cell_ct)
-            self.lstm_node_list.append(LstmNode(LstmParam(self.lstm_param.mem_cell_ct, self.lstm_param.mem_cell_ct), lstm_state))
+            self.lstm_node_list.append(LstmNode(self.lstm_param, lstm_state))
+            lstm_hidden_state = LstmState(self.lstm_param.mem_cell_ct, self.lstm_param.mem_cell_ct)
+            self.lstm_hidden_node_list.append(LstmNode(self.lstm_hidden_param, lstm_hidden_state))
 
         # get index of most recent x input
         idx = len(self.x_list) - 1
         if idx == 0:
             # no recurrent inputs yet
-            self.lstm_hidden_node_list[idx].bottom_data_is(x)
-            self.lstm_node_list[idx].bottom_data_is(self.lstm_hidden_node_list[idx].state.h.tolist())
+            self.lstm_node_list[idx].bottom_data_is(x)
+            self.lstm_hidden_node_list[idx].bottom_data_is(self.lstm_node_list[idx].state.h)
         else:
-            s_prev = self.lstm_hidden_node_list[idx - 1].state.s
-            h_prev = self.lstm_hidden_node_list[idx - 1].state.h
-            self.lstm_hidden_node_list[idx].bottom_data_is(x, s_prev, h_prev)
             s_prev = self.lstm_node_list[idx - 1].state.s
             h_prev = self.lstm_node_list[idx - 1].state.h
-            self.lstm_node_list[idx].bottom_data_is(self.lstm_hidden_node_list[idx].state.h, s_prev, h_prev)
+            self.lstm_node_list[idx].bottom_data_is(x, s_prev, h_prev)
+            s_prev = self.lstm_hidden_node_list[idx - 1].state.s
+            h_prev = self.lstm_hidden_node_list[idx - 1].state.h
+            self.lstm_hidden_node_list[idx].bottom_data_is(self.lstm_node_list[idx].state.h, s_prev, h_prev)
