@@ -1,6 +1,6 @@
 import numpy as np
 
-from lstm import LstmParam, LstmNetwork
+from multilstm import LstmParam, LstmNetwork
 
 class ToyLossLayer:
     """
