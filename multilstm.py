@@ -42,7 +42,6 @@ class LstmParam:
         self.bi_diff = np.zeros(mem_cell_ct) 
         self.bf_diff = np.zeros(mem_cell_ct) 
         self.bo_diff = np.zeros(mem_cell_ct) 
-        self.x_diff = np.zeros(x_dim) 
 
     def apply_diff(self, lr = 1):
         self.wg -= lr * self.wg_diff
@@ -62,7 +61,7 @@ class LstmParam:
         self.bi_diff = np.zeros_like(self.bi) 
         self.bf_diff = np.zeros_like(self.bf) 
         self.bo_diff = np.zeros_like(self.bo) 
-        self.x_diff = np.zeros(self.x_dim) 
+        #self.x_diff = np.zeros(self.x_dim) 
 
 class LstmState:
     def __init__(self, mem_cell_ct, x_dim):
@@ -74,6 +73,7 @@ class LstmState:
         self.h = np.zeros(mem_cell_ct)
         self.bottom_diff_h = np.zeros_like(self.h)
         self.bottom_diff_s = np.zeros_like(self.s)
+        self.bottom_diff_x = np.zeros(x_dim) 
     
 class LstmNode:
     def __init__(self, lstm_param, lstm_state):
@@ -139,7 +139,7 @@ class LstmNode:
         # save bottom diffs
         self.state.bottom_diff_s = ds * self.state.f
         self.state.bottom_diff_h = dxc[self.param.x_dim:]
-        self.param.x_diff = dxc[:self.param.x_dim]
+        self.state.bottom_diff_x = dxc[:self.param.x_dim]
 
         # print 'wi_diff'
         # print self.param.wi_diff
@@ -191,7 +191,7 @@ class LstmNetwork():
 
         idx = len(self.x_list) - 1
         # first node only gets diffs from label ...
-        diff_h = self.lstm_hidden_node_list[idx].param.x_diff
+        diff_h = self.lstm_hidden_node_list[idx].state.bottom_diff_x
         # here s is not affecting loss due to h(t+1), hence we set equal to zero
         diff_s = np.zeros(self.lstm_param.mem_cell_ct)
         self.lstm_node_list[idx].top_diff_is(diff_h, diff_s)
@@ -200,7 +200,7 @@ class LstmNetwork():
         ### ... following nodes also get diffs from next nodes, hence we add diffs to diff_h
         ### we also propagate error along constant error carousel using diff_s
         while idx >= 0:
-            diff_h = self.lstm_hidden_node_list[idx].param.x_diff
+            diff_h = self.lstm_hidden_node_list[idx].state.bottom_diff_x
             diff_h += self.lstm_node_list[idx + 1].state.bottom_diff_h
             diff_s = self.lstm_node_list[idx + 1].state.bottom_diff_s
             self.lstm_node_list[idx].top_diff_is(diff_h, diff_s)
