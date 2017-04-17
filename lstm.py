@@ -1,244 +1,191 @@
-import copy, numpy as np
-np.random.seed(0)
+import random
 
-# compute sigmoid nonlinearity
-def tanh(x):
-    output = np.tanh(x)
-    return output
+import numpy as np
+import math
 
-def tanh_output_to_derivative(output):
-    return 1 - output * output
+def sigmoid(x): 
+    return 1. / (1 + np.exp(-x))
 
-def sigmoid(x):
-    output = 1/(1+np.exp(-x))
-    return output
+def sigmoid_derivative(values): 
+    return values*(1-values)
 
-# convert output of sigmoid function to its derivative
-def sigmoid_output_to_derivative(output):
-    return output*(1-output)
+def tanh_derivative(values): 
+    return 1. - values ** 2
 
+# createst uniform random array w/ values in [a,b) and shape args
+def rand_arr(a, b, *args): 
+    np.random.seed(0)
+    return np.random.rand(*args) * (b - a) + a
 
-# training dataset generation
-int2binary = {}
-binary_dim = 8
+class LstmParam:
+    def __init__(self, mem_cell_ct, x_dim):
+        self.mem_cell_ct = mem_cell_ct
+        self.x_dim = x_dim
+        concat_len = x_dim + mem_cell_ct
+        # weight matrices
+        self.wg = rand_arr(-0.1, 0.1, mem_cell_ct, concat_len)
+        self.wi = rand_arr(-0.1, 0.1, mem_cell_ct, concat_len) 
+        self.wf = rand_arr(-0.1, 0.1, mem_cell_ct, concat_len)
+        self.wo = rand_arr(-0.1, 0.1, mem_cell_ct, concat_len)
+        # bias terms
+        self.bg = rand_arr(-0.1, 0.1, mem_cell_ct) 
+        self.bi = rand_arr(-0.1, 0.1, mem_cell_ct) 
+        self.bf = rand_arr(-0.1, 0.1, mem_cell_ct) 
+        self.bo = rand_arr(-0.1, 0.1, mem_cell_ct) 
+        # diffs (derivative of loss function w.r.t. all parameters)
+        self.wg_diff = np.zeros((mem_cell_ct, concat_len)) 
+        self.wi_diff = np.zeros((mem_cell_ct, concat_len)) 
+        self.wf_diff = np.zeros((mem_cell_ct, concat_len)) 
+        self.wo_diff = np.zeros((mem_cell_ct, concat_len)) 
+        self.bg_diff = np.zeros(mem_cell_ct) 
+        self.bi_diff = np.zeros(mem_cell_ct) 
+        self.bf_diff = np.zeros(mem_cell_ct) 
+        self.bo_diff = np.zeros(mem_cell_ct) 
 
-largest_number = pow(2,binary_dim)
-binary = np.unpackbits(
-    np.array([range(largest_number)],dtype=np.uint8).T,axis=1)
-for i in range(largest_number):
-    int2binary[i] = binary[i]
+    def apply_diff(self, lr = 1):
+        self.wg -= lr * self.wg_diff
+        self.wi -= lr * self.wi_diff
+        self.wf -= lr * self.wf_diff
+        self.wo -= lr * self.wo_diff
+        self.bg -= lr * self.bg_diff
+        self.bi -= lr * self.bi_diff
+        self.bf -= lr * self.bf_diff
+        self.bo -= lr * self.bo_diff
+        # reset diffs to zero
+        self.wg_diff = np.zeros_like(self.wg)
+        self.wi_diff = np.zeros_like(self.wi) 
+        self.wf_diff = np.zeros_like(self.wf) 
+        self.wo_diff = np.zeros_like(self.wo) 
+        self.bg_diff = np.zeros_like(self.bg)
+        self.bi_diff = np.zeros_like(self.bi) 
+        self.bf_diff = np.zeros_like(self.bf) 
+        self.bo_diff = np.zeros_like(self.bo) 
 
-
-# input variables
-alpha = 0.1
-input_dim = 2
-#hidden_dim = 16
-output_dim = 1
-
-
-# initialize neural network weights
-W_i = 2*np.random.random((output_dim,input_dim)) - 1
-W_f = 2*np.random.random((output_dim,input_dim)) - 1
-W_o = 2*np.random.random((output_dim,input_dim)) - 1
-W_c = 2*np.random.random((output_dim,input_dim)) - 1
-R_i = 2*np.random.random((output_dim,output_dim)) - 1
-R_f = 2*np.random.random((output_dim,output_dim)) - 1
-R_o = 2*np.random.random((output_dim,output_dim)) - 1
-R_c = 2*np.random.random((output_dim,output_dim)) - 1
-b_i = 2*np.random.random((output_dim,1)) - 1
-b_f = 2*np.random.random((output_dim,1)) - 1
-b_o = 2*np.random.random((output_dim,1)) - 1
-b_c = 2*np.random.random((output_dim,1)) - 1
-#synapse_1 = 2*np.random.random((hidden_dim,output_dim)) - 1
-#synapse_h = 2*np.random.random((hidden_dim,hidden_dim)) - 1
-
-W_i_update = np.zeros_like(W_i)
-W_f_update = np.zeros_like(W_f)
-W_o_update = np.zeros_like(W_o)
-W_c_update = np.zeros_like(W_c)
-R_i_update = np.zeros_like(R_i)
-R_f_update = np.zeros_like(R_f)
-R_o_update = np.zeros_like(R_o)
-R_c_update = np.zeros_like(R_c)
-b_i_update = np.zeros_like(b_i)
-b_f_update = np.zeros_like(b_f)
-b_o_update = np.zeros_like(b_o)
-b_c_update = np.zeros_like(b_c)
-#synapse_1_update = np.zeros_like(synapse_1)
-#synapse_h_update = np.zeros_like(synapse_h)
-
-# training logic
-for j in range(10000):
+class LstmState:
+    def __init__(self, mem_cell_ct, x_dim):
+        self.g = np.zeros(mem_cell_ct)
+        self.i = np.zeros(mem_cell_ct)
+        self.f = np.zeros(mem_cell_ct)
+        self.o = np.zeros(mem_cell_ct)
+        self.s = np.zeros(mem_cell_ct)
+        self.h = np.zeros(mem_cell_ct)
+        self.bottom_diff_h = np.zeros_like(self.h)
+        self.bottom_diff_s = np.zeros_like(self.s)
     
-    # generate a simple addition problem (a + b = c)
-    a_int = np.random.randint(largest_number/2) # int version
-    a = int2binary[a_int] # binary encoding
+class LstmNode:
+    def __init__(self, lstm_param, lstm_state):
+        # store reference to parameters and to activations
+        self.state = lstm_state
+        self.param = lstm_param
+        # non-recurrent input concatenated with recurrent input
+        self.xc = None
 
-    b_int = np.random.randint(largest_number/2) # int version
-    b = int2binary[b_int] # binary encoding
+    def bottom_data_is(self, x, s_prev = None, h_prev = None):
+        # if this is the first lstm node in the network
+        if s_prev == None: s_prev = np.zeros_like(self.state.s)
+        if h_prev == None: h_prev = np.zeros_like(self.state.h)
+        # save data for use in backprop
+        self.s_prev = s_prev
+        self.h_prev = h_prev
 
-    # true answer
-    e_int = a_int + b_int
-    e = int2binary[e_int]
+        # concatenate x(t) and h(t-1)
+        xc = np.hstack((x,  h_prev))
+        self.state.g = np.tanh(np.dot(self.param.wg, xc) + self.param.bg)
+        self.state.i = sigmoid(np.dot(self.param.wi, xc) + self.param.bi)
+        self.state.f = sigmoid(np.dot(self.param.wf, xc) + self.param.bf)
+        self.state.o = sigmoid(np.dot(self.param.wo, xc) + self.param.bo)
+        self.state.s = self.state.g * self.state.i + s_prev * self.state.f
+        self.state.h = self.state.s * self.state.o
+
+        self.xc = xc
     
-    # where we'll store our best guess (binary encoded)
-    d = np.zeros_like(e)
+    def top_diff_is(self, top_diff_h, top_diff_s):
+        # notice that top_diff_s is carried along the constant error carousel
+        ds = self.state.o * top_diff_h + top_diff_s
+        do = self.state.s * top_diff_h
+        di = self.state.g * ds
+        dg = self.state.i * ds
+        df = self.s_prev * ds
 
-    overallError = 0
-    
-    #layer_2_deltas = list()
-    i_list = list()
-    f_list = list()
-    o_list = list()
-    cp_list = list()
-    c_list = list()
-    c_list.append(np.zeros(output_dim))
-    h_list = list()
-    h_list.append(np.zeros(output_dim))
-    error_list = list()
+        # diffs w.r.t. vector inside sigma / tanh function
+        di_input = sigmoid_derivative(self.state.i) * di 
+        df_input = sigmoid_derivative(self.state.f) * df 
+        do_input = sigmoid_derivative(self.state.o) * do 
+        dg_input = tanh_derivative(self.state.g) * dg
 
-    #layer_2_deltas = list()
-    #layer_1_values = list()
-    #layer_1_values.append(np.zeros(hidden_dim))
-    
-    # moving along the positions in the binary encoding
-    for position in range(binary_dim):
-        
-        # generate input and output
-        X = np.array([[a[binary_dim - position - 1],b[binary_dim - position - 1]]]).T
-        y = np.array([[e[binary_dim - position - 1]]]).T
+        # diffs w.r.t. inputs
+        self.param.wi_diff += np.outer(di_input, self.xc)
+        self.param.wf_diff += np.outer(df_input, self.xc)
+        self.param.wo_diff += np.outer(do_input, self.xc)
+        self.param.wg_diff += np.outer(dg_input, self.xc)
+        self.param.bi_diff += di_input
+        self.param.bf_diff += df_input       
+        self.param.bo_diff += do_input
+        self.param.bg_diff += dg_input       
 
-        i = sigmoid(np.dot(W_i,X) + np.dot(R_i,h_list[-1]) + b_i)
-        f = sigmoid(np.dot(W_f,X) + np.dot(R_f,h_list[-1]) + b_f)
-        o = sigmoid(np.dot(W_o,X) + np.dot(R_o,h_list[-1]) + b_o)
-        cp = tanh(np.dot(W_c,X) + np.dot(R_c,h_list[-1]) + b_c)
-        c = f * c_list[-1] + i * cp
-        h = o * tanh(c)
+        # compute bottom diff
+        dxc = np.zeros_like(self.xc)
+        dxc += np.dot(self.param.wi.T, di_input)
+        dxc += np.dot(self.param.wf.T, df_input)
+        dxc += np.dot(self.param.wo.T, do_input)
+        dxc += np.dot(self.param.wg.T, dg_input)
 
-        error = y - h
-        #layer_2_deltas.append((error)*tanh_output_to_derivative(h))
-        overallError += np.abs(error[0])
+        # save bottom diffs
+        self.state.bottom_diff_s = ds * self.state.f
+        self.state.bottom_diff_h = dxc[self.param.x_dim:]
 
-        d[binary_dim - position - 1] = np.round(h[0][0])
+class LstmNetwork():
+    def __init__(self, lstm_param):
+        self.lstm_param = lstm_param
+        self.lstm_node_list = []
+        # input sequence
+        self.x_list = []
 
-        i_list.append(copy.deepcopy(i))
-        f_list.append(copy.deepcopy(f))
-        o_list.append(copy.deepcopy(o))
-        cp_list.append(copy.deepcopy(cp))
-        c_list.append(copy.deepcopy(c))
-        h_list.append(copy.deepcopy(h))
-        error_list.append(copy.deepcopy(error))
+    def y_list_is(self, y_list, loss_layer):
+        """
+        Updates diffs by setting target sequence 
+        with corresponding loss layer. 
+        Will *NOT* update parameters.  To update parameters,
+        call self.lstm_param.apply_diff()
+        """
+        assert len(y_list) == len(self.x_list)
+        idx = len(self.x_list) - 1
+        # first node only gets diffs from label ...
+        loss = loss_layer.loss(self.lstm_node_list[idx].state.h, y_list[idx])
+        diff_h = loss_layer.bottom_diff(self.lstm_node_list[idx].state.h, y_list[idx])
+        # here s is not affecting loss due to h(t+1), hence we set equal to zero
+        diff_s = np.zeros(self.lstm_param.mem_cell_ct)
+        self.lstm_node_list[idx].top_diff_is(diff_h, diff_s)
+        idx -= 1
 
-        # # hidden layer (input ~+ prev_hidden)
-        # layer_1 = sigmoid(np.dot(X,synapse_0) + np.dot(layer_1_values[-1],synapse_h))
+        ### ... following nodes also get diffs from next nodes, hence we add diffs to diff_h
+        ### we also propagate error along constant error carousel using diff_s
+        while idx >= 0:
+            loss += loss_layer.loss(self.lstm_node_list[idx].state.h, y_list[idx])
+            diff_h = loss_layer.bottom_diff(self.lstm_node_list[idx].state.h, y_list[idx])
+            diff_h += self.lstm_node_list[idx + 1].state.bottom_diff_h
+            diff_s = self.lstm_node_list[idx + 1].state.bottom_diff_s
+            self.lstm_node_list[idx].top_diff_is(diff_h, diff_s)
+            idx -= 1 
 
-        # # output layer (new binary representation)
-        # layer_2 = sigmoid(np.dot(layer_1,synapse_1))
+        return loss
 
-        # # did we miss?... if so, by how much?
-        # layer_2_error = y - layer_2
-        # layer_2_deltas.append((layer_2_error)*sigmoid_output_to_derivative(layer_2))
-        # overallError += np.abs(layer_2_error[0])
-    
-        # # decode estimate so we can print it out
-        # d[binary_dim - position - 1] = np.round(layer_2[0][0])
-        
-        # # store hidden layer so we can use it in the next timestep
-        # layer_1_values.append(copy.deepcopy(layer_1))
-    
-    prev_c_delta = np.zeros_like(b_c)
-    next_h_delta = np.zeros_like(b_c)
-    #future_layer_1_delta = np.zeros(hidden_dim)
-    
-    for position in range(binary_dim):
-        
-        X = np.array([[a[position],b[position]]]).T
+    def x_list_clear(self):
+        self.x_list = []
 
-        error = error_list[-position-1] + next_h_delta
-        i = i_list[-position-1]
-        f = f_list[-position-1]
-        o = o_list[-position-1]
-        cp = cp_list[-position-1]
-        h = h_list[-position-1]
-        prev_h = h_list[-position-2]
-        c = c_list[-position-1]
-        prev_c = c_list[-position-2]
+    def x_list_add(self, x):
+        self.x_list.append(x)
+        if len(self.x_list) > len(self.lstm_node_list):
+            # need to add new lstm node, create new state mem
+            lstm_state = LstmState(self.lstm_param.mem_cell_ct, self.lstm_param.x_dim)
+            self.lstm_node_list.append(LstmNode(self.lstm_param, lstm_state))
 
-        o_delta = error * tanh(c)
-        prev_c_delta += error * o * tanh_output_to_derivative(tanh(c))
-        i_delta = prev_c_delta * cp
-        f_delta = prev_c_delta * prev_c
-        cp_delta = prev_c_delta * i
-        prev_c_delta = prev_c_delta * f
-        b_i_delta = i_delta * sigmoid_output_to_derivative(i)
-        b_f_delta = f_delta * sigmoid_output_to_derivative(f)
-        b_o_delta = o_delta * sigmoid_output_to_derivative(o)
-        b_c_delta = cp_delta * tanh_output_to_derivative(cp)
-
-        W_i_update += b_i_delta.dot(X.T)
-        W_f_update += b_f_delta.dot(X.T)
-        W_o_update += b_o_delta.dot(X.T)
-        W_c_update += b_c_delta.dot(X.T)
-        R_i_update += b_i_delta.dot(prev_h.T)
-        R_f_update += b_f_delta.dot(prev_h.T)
-        R_o_update += b_o_delta.dot(prev_h.T)
-        R_c_update += b_c_delta.dot(prev_h.T)
-        b_i_update += b_i_delta
-        b_f_update += b_f_delta
-        b_o_update += b_o_delta
-        b_c_update += b_c_delta
-        next_h_delta = R_i.T.dot(b_i_delta) + R_f.T.dot(b_f_delta) + R_o.T.dot(b_o_delta) + R_c.T.dot(b_c_delta)
-
-        # layer_1 = layer_1_values[-position-1]
-        # prev_layer_1 = layer_1_values[-position-2]
-        
-        # # error at output layer
-        # layer_2_delta = layer_2_deltas[-position-1]
-        # # error at hidden layer
-        # layer_1_delta = (future_layer_1_delta.dot(synapse_h.T) + layer_2_delta.dot(synapse_1.T)) * sigmoid_output_to_derivative(layer_1)
-
-        # # let's update all our weights so we can try again
-        # synapse_1_update += np.atleast_2d(layer_1).T.dot(layer_2_delta)
-        # synapse_h_update += np.atleast_2d(prev_layer_1).T.dot(layer_1_delta)
-        # synapse_0_update += X.T.dot(layer_1_delta)
-        
-        # future_layer_1_delta = layer_1_delta
-    
-    W_i += W_i_update * alpha
-    W_f += W_f_update * alpha
-    W_o += W_o_update * alpha
-    W_c += W_c_update * alpha
-    R_i += R_i_update * alpha
-    R_f += R_f_update * alpha
-    R_o += R_o_update * alpha
-    R_c += R_c_update * alpha
-    b_i += b_i_update * alpha
-    b_f += b_f_update * alpha
-    b_o += b_o_update * alpha
-    b_c += b_c_update * alpha
-
-    W_i_update *= 0
-    W_f_update *= 0
-    W_o_update *= 0
-    W_c_update *= 0
-    R_i_update *= 0
-    R_f_update *= 0
-    R_o_update *= 0
-    R_c_update *= 0
-    b_i_update *= 0
-    b_f_update *= 0
-    b_o_update *= 0
-    b_c_update *= 0
-    
-    # print out progress
-    if(j % 1000 == 0):
-        print "Error:" + str(overallError)
-        print "Pred:" + str(d)
-        print "True:" + str(e)
-        out = 0
-        for index,x in enumerate(reversed(d)):
-            out += x*pow(2,index)
-        print str(a_int) + " + " + str(b_int) + " = " + str(out)
-        print "------------"
-
-        
+        # get index of most recent x input
+        idx = len(self.x_list) - 1
+        if idx == 0:
+            # no recurrent inputs yet
+            self.lstm_node_list[idx].bottom_data_is(x)
+        else:
+            s_prev = self.lstm_node_list[idx - 1].state.s
+            h_prev = self.lstm_node_list[idx - 1].state.h
+            self.lstm_node_list[idx].bottom_data_is(x, s_prev, h_prev)
