@@ -1,3 +1,4 @@
 theme: jekyll-theme-hacker
 title: "CuLSTM: A Python-based DSL for LSTMs on GPU"
 description: Yuang Liu (yuangl) and Shuyao Bi (shuyaob)
+markdown: kramdown

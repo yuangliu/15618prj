@@ -46,8 +46,8 @@ def example_0_multi():
 
     # parameters for input data dimension and lstm cell count 
     mem_cell_ct = 100
-    x_dim = 50
-    layer = 3
+    x_dim = 100
+    layer = 1
     lstm_param = LstmParam(mem_cell_ct, x_dim) 
     lstm_hidden_param = LstmParam(mem_cell_ct, mem_cell_ct) 
     lstm_net = LstmNetwork(lstm_param, lstm_hidden_param, layer)
@@ -124,7 +124,7 @@ def example_1_multi():
     # parameters for input data dimension and lstm cell count 
     mem_cell_ct = 100
     x_dim = 2
-    layer = 3
+    layer = 2
     lstm_param = LstmParam(mem_cell_ct, x_dim) 
     lstm_hidden_param = LstmParam(mem_cell_ct, mem_cell_ct) 
     lstm_net = LstmNetwork(lstm_param, lstm_hidden_param, layer)
@@ -141,7 +141,7 @@ def example_1_multi():
         e = int2binary[e_int]
         # where we'll store our best guess (binary encoded)
         d = np.zeros_like(e)
-        y_list = [e[binary_dim - position - 1] for position in range(binary_dim)]
+        y_list = [1-e[binary_dim - position - 1] for position in range(binary_dim)]
         input_val_arr = [[a[binary_dim - position - 1],b[binary_dim - position - 1]] for position in range(binary_dim)]
 
         for ind in range(len(y_list)):
@@ -190,5 +190,5 @@ def example_2_multi():
         lstm_net.x_list_clear()
 
 if __name__ == "__main__":
-    example_2_multi()
+    example_1_multi()
 
