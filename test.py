@@ -1,6 +1,7 @@
 import numpy as np
 
-from multilstm import LstmParam, LstmNetwork
+from multilstm import LstmParam, LstmParamPeephole, LstmNetwork, sigmoid, linear, tanh
+import multilstm
 import imdb
 
 class ToyLossLayer:
@@ -23,13 +24,13 @@ def example_0():
 
     # parameters for input data dimension and lstm cell count 
     mem_cell_ct = 100
-    x_dim = 50
+    x_dim = 200
     lstm_param = LstmParam(mem_cell_ct, x_dim) 
     lstm_net = LstmNetwork(lstm_param)
     y_list = [-0.5,0.2,0.1, -0.5]
     input_val_arr = [np.random.random(x_dim) for _ in y_list]
 
-    for cur_iter in range(100):
+    for cur_iter in range(1000):
         print("cur iter: " + str(cur_iter))
         for ind in range(len(y_list)):
             lstm_net.x_list_add(input_val_arr[ind])
@@ -46,7 +47,7 @@ def example_0_multi():
 
     # parameters for input data dimension and lstm cell count 
     mem_cell_ct = 100
-    x_dim = 100
+    x_dim = 50
     layer = 1
     lstm_param = LstmParam(mem_cell_ct, x_dim) 
     lstm_hidden_param = LstmParam(mem_cell_ct, mem_cell_ct) 
@@ -62,7 +63,7 @@ def example_0_multi():
 
         loss = lstm_net.y_list_is(y_list, ToyLossLayer)
         print("loss: " + str(loss))
-        lstm_net.apply_diff(0.5, 0.5)
+        lstm_net.apply_diff(0.1, 0.5)
         lstm_net.x_list_clear()
 
 def example_1():
@@ -129,7 +130,7 @@ def example_1_multi():
     lstm_hidden_param = LstmParam(mem_cell_ct, mem_cell_ct) 
     lstm_net = LstmNetwork(lstm_param, lstm_hidden_param, layer)
 
-    for cur_iter in range(1000):
+    for cur_iter in range(10000):
         print("cur iter: " + str(cur_iter))
         # generate a simple addition problem (a + b = c)
         a_int = np.random.randint(largest_number/2) # int version
@@ -150,7 +151,7 @@ def example_1_multi():
 
         loss = lstm_net.y_list_is(y_list, ToyLossLayer)
         print("loss: " + str(loss))
-        lstm_net.apply_diff(0.5, 0.5)
+        lstm_net.apply_diff(0.01, 0.5)
         lstm_net.x_list_clear()
 
 def example_2_multi():
@@ -168,27 +169,95 @@ def example_2_multi():
 
     # parameters for input data dimension and lstm cell count 
     mem_cell_ct = 100
-    x_dim = 2820
-    layer = 1
+    x_dim = 2
+    layer = 2
     lstm_param = LstmParam(mem_cell_ct, x_dim) 
     lstm_hidden_param = LstmParam(mem_cell_ct, mem_cell_ct) 
     lstm_net = LstmNetwork(lstm_param, lstm_hidden_param, layer)
-    y_list = imdb.data[1]
-    input_val_arr = imdb.data[0]
+    x_examples = []
+    y_examples = []
 
-    for cur_iter in range(1000):
+    for example in range(100):
+        # generate a simple addition problem (a + b = c)
+        a_int = np.random.randint(largest_number/2) # int version
+        a = int2binary[a_int] # binary encoding
+        b_int = np.random.randint(largest_number/2) # int version
+        b = int2binary[b_int] # binary encoding
+        # true answer
+        e_int = a_int + b_int
+        e = int2binary[e_int]
+        # where we'll store our best guess (binary encoded)
+        d = np.zeros_like(e)
+        y_list = [e[binary_dim - position - 1] for position in range(binary_dim)]
+        y_examples.append(y_list)
+        input_val_arr = [[a[binary_dim - position - 1],b[binary_dim - position - 1]] for position in range(binary_dim)]
+        x_examples.append(input_val_arr)
+
+    for cur_iter in range(10000):
+        loss = 0
         print("cur iter: " + str(cur_iter))
-        for ind in range(len(y_list)):
-            lstm_net.x_list_add(input_val_arr[ind] + [0] * (x_dim - len(input_val_arr[ind])))
-            if ind % 1000 == 0:
-                print str(ind) + " / " + str(len(y_list))
-            #print("y_pred[" + str(ind) + "] : " + str(lstm_net.lstm_node_list[layer - 1][ind].state.h[0]))
+        for example in range(100):
+            for ind in range(binary_dim):
+                lstm_net.x_list_add(x_examples[example][ind])
+                #print("y_pred[" + str(ind) + "] : " + str(lstm_net.lstm_node_list[layer - 1][ind].state.h[0]) + " " + str(y_list[ind]))
+            loss += lstm_net.y_list_is(y_examples[example], ToyLossLayer)
+            lstm_net.x_list_clear()
 
-        loss = lstm_net.y_list_is(y_list, ToyLossLayer)
-        print("loss: " + str(loss))
-        lstm_net.apply_diff(0.5, 0.5)
-        lstm_net.x_list_clear()
+        print("loss: " + str(loss/100))
+        lstm_net.apply_diff(0.01)
+
+def example_3_multi():
+    # learns to repeat simple sequence from random inputs
+    np.random.seed(0)
+    # training dataset generation
+    int2binary = {}
+    binary_dim = 8
+
+    largest_number = pow(2,binary_dim)
+    binary = np.unpackbits(
+        np.array([range(largest_number)],dtype=np.uint8).T,axis=1)
+    for i in range(largest_number):
+        int2binary[i] = binary[i]
+
+    # parameters for input data dimension and lstm cell count 
+    mem_cell_ct = 100
+    x_dim = 2
+    layer = 2
+    lstm_param = LstmParamPeephole(mem_cell_ct, x_dim) 
+    lstm_hidden_param = LstmParamPeephole(mem_cell_ct, mem_cell_ct) 
+    lstm_net = LstmNetwork(lstm_param, lstm_hidden_param, layer, peephole = True)
+    x_examples = []
+    y_examples = []
+
+    for example in range(100):
+        # generate a simple addition problem (a + b = c)
+        a_int = np.random.randint(largest_number/2) # int version
+        a = int2binary[a_int] # binary encoding
+        b_int = np.random.randint(largest_number/2) # int version
+        b = int2binary[b_int] # binary encoding
+        # true answer
+        e_int = a_int + b_int
+        e = int2binary[e_int]
+        # where we'll store our best guess (binary encoded)
+        d = np.zeros_like(e)
+        y_list = [e[binary_dim - position - 1] for position in range(binary_dim)]
+        y_examples.append(y_list)
+        input_val_arr = [[a[binary_dim - position - 1],b[binary_dim - position - 1]] for position in range(binary_dim)]
+        x_examples.append(input_val_arr)
+
+    for cur_iter in range(10000):
+        loss = 0
+        print("cur iter: " + str(cur_iter))
+        for example in range(100):
+            for ind in range(binary_dim):
+                lstm_net.x_list_add(x_examples[example][ind])
+                #print("y_pred[" + str(ind) + "] : " + str(lstm_net.lstm_node_list[layer - 1][ind].state.h[0]) + " " + str(y_list[ind]))
+            loss += lstm_net.y_list_is(y_examples[example], ToyLossLayer)
+            lstm_net.x_list_clear()
+
+        print("loss: " + str(loss/100))
+        lstm_net.apply_diff(0.01)
 
 if __name__ == "__main__":
-    example_1_multi()
+    example_2_multi()
 
