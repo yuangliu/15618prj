@@ -1,5 +1,7 @@
 <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML"> </script>
-# Project Proposal
+# Project Checkpoint {#checkpoint .emphasized}
+
+# Project Proposal {#proposal .emphasized}
 
 ## Summary
 <!--Summarize your project in no more than 2-3 sentences. Describe what you plan to do and what parallel systems you will be working with. -->
