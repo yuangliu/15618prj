@@ -16,7 +16,4 @@
 title: "CuLSTM: A Python-based DSL for LSTMs on GPU"
 description: Yuang Liu (yuangl) and Shuyao Bi (shuyaob)
 markdown: kramdown
-show_downloads: false
-github: yuangliu
-github.tar_url: https://github.com/yuangliu/15618prj/archive/master.tar.gz
-github.repository_url: https://github.com/yuangliu/15618prj
+show_downloads: true
