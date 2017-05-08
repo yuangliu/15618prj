@@ -21,7 +21,7 @@ import random
 import tensorflow as tf
 import tensorflow.contrib.layers as layers
 
-map_fn = tf.python.functional_ops.map_fn
+map_fn = tf.map_fn
 
 ################################################################################
 ##                           DATASET GENERATION                               ##
