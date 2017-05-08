@@ -20,6 +20,7 @@ import numpy as np
 import random
 import tensorflow as tf
 import tensorflow.contrib.layers as layers
+import time
 
 map_fn = tf.map_fn
 
@@ -69,7 +70,6 @@ def generate_batch(num_bits, batch_size):
     """
     x = np.empty((num_bits, batch_size, 2))
     y = np.empty((num_bits, batch_size, 1))
-
     for i in range(batch_size):
         a, b, r = generate_example(num_bits)
         x[:, i, 0] = a
@@ -82,11 +82,12 @@ def generate_batch(num_bits, batch_size):
 ##                           GRAPH DEFINITION                                 ##
 ################################################################################
 
-INPUT_SIZE    = 2       # 2 bits per timestep
-RNN_HIDDEN    = 20
-OUTPUT_SIZE   = 1       # 1 bit per timestep
+INPUT_SIZE    = 512     # 2 bits per timestep
+RNN_HIDDEN    = 512
+OUTPUT_SIZE   = 512     # 1 bit per timestep
 TINY          = 1e-6    # to avoid NaNs in logs
 LEARNING_RATE = 0.01
+LAYERS        = 4
 
 USE_LSTM = True
 
@@ -107,9 +108,10 @@ outputs = tf.placeholder(tf.float32, (None, None, OUTPUT_SIZE)) # (time, batch, 
 # Example LSTM cell with learnable zero_state can be found here:
 #    https://gist.github.com/nivwusquorum/160d5cf7e1e82c21fad3ebf04f039317
 if USE_LSTM:
-    cell = tf.nn.rnn_cell.BasicLSTMCell(RNN_HIDDEN, state_is_tuple=True)
+    cell = tf.contrib.rnn.BasicLSTMCell(RNN_HIDDEN, state_is_tuple=True)
+    cell = tf.contrib.rnn.MultiRNNCell([cell] * LAYERS, state_is_tuple=True)
 else:
-    cell = tf.nn.rnn_cell.BasicRNNCell(RNN_HIDDEN)
+    cell = tf.contrib.rnn.BasicRNNCell(RNN_HIDDEN)
 
 # Create initial state. Here it is just a constant tensor filled with zeros,
 # but in principle it could be a learnable parameter. This is a bit tricky
@@ -117,11 +119,13 @@ else:
 # Variables, which are then tiled along batch dimension and grouped into tuple.
 batch_size    = tf.shape(inputs)[1]
 initial_state = cell.zero_state(batch_size, tf.float32)
+#initial_state = rnn_states = stacked_lstm.zero_state(batch_size, tf.float32)
 
 # Given inputs (time, batch, input_size) outputs a tuple
 #  - outputs: (time, batch, output_size)  [do not mistake with OUTPUT_SIZE]
 #  - states:  (time, batch, hidden_size)
 rnn_outputs, rnn_states = tf.nn.dynamic_rnn(cell, inputs, initial_state=initial_state, time_major=True)
+#rnn_outputs, rnn_states = cell(inputs, initial_state)
 
 # project output from rnn output size to OUTPUT_SIZE. Sometimes it is worth adding
 # an extra layer here.
@@ -146,29 +150,46 @@ accuracy = tf.reduce_mean(tf.cast(tf.abs(outputs - predicted_outputs) < 0.5, tf.
 ##                           TRAINING LOOP                                    ##
 ################################################################################
 
-NUM_BITS = 10
-ITERATIONS_PER_EPOCH = 100
-BATCH_SIZE = 16
+NUM_BITS = 100
+ITERATIONS_PER_EPOCH = 1
+BATCH_SIZE = 64
 
-valid_x, valid_y = generate_batch(num_bits=NUM_BITS, batch_size=100)
+#valid_x, valid_y = generate_batch(num_bits=NUM_BITS, batch_size=BATCH_SIZE)
+#x=[]
+#y=[]
+random_x=[]
+random_y=[]
+
+for i in range(ITERATIONS_PER_EPOCH):
+    #x_tmp, y_tmp = generate_batch(num_bits=NUM_BITS, batch_size=BATCH_SIZE)
+    #x.append(x_tmp)
+    #y.append(y_tmp)
+    x_tmp = np.empty((NUM_BITS, BATCH_SIZE, INPUT_SIZE))
+    y_tmp = np.empty((NUM_BITS, BATCH_SIZE, OUTPUT_SIZE))
+    random_x.append(x_tmp)
+    random_y.append(y_tmp)
 
 session = tf.Session()
 # For some reason it is our job to do this:
-session.run(tf.initialize_all_variables())
+session.run(tf.global_variables_initializer())
 
-for epoch in range(1000):
+for epoch in range(3):
     epoch_error = 0
-    for _ in range(ITERATIONS_PER_EPOCH):
+    start = time.time()
+    for i in range(ITERATIONS_PER_EPOCH):
         # here train_fn is what triggers backprop. error and accuracy on their
         # own do not trigger the backprop.
-        x, y = generate_batch(num_bits=NUM_BITS, batch_size=BATCH_SIZE)
         epoch_error += session.run([error, train_fn], {
-            inputs: x,
-            outputs: y,
+            inputs: random_x[i],
+            outputs: random_y[i],
         })[0]
     epoch_error /= ITERATIONS_PER_EPOCH
+    '''
     valid_accuracy = session.run(accuracy, {
         inputs:  valid_x,
         outputs: valid_y,
     })
-    print "Epoch %d, train error: %.2f, valid accuracy: %.1f %%" % (epoch, epoch_error, valid_accuracy * 100.0)
+    '''
+    print "Epoch %d, train error: %.2f, valid accuracy: %.1f %%" % (epoch, epoch_error, 0)
+    end = time.time()
+    print(end - start)
