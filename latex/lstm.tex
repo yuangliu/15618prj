@@ -50,4 +50,18 @@ $o_{t}$ $[N\times 1]$: Output gate vector. Output candidate.
 \end{equation}
 $\delta h_{T} = 0$\\
 $\delta c_{T} = 0$\\
+
+\begin{equation}
+\begin{aligned}
+\delta y_t &= \Delta_t + R_z\delta z_{t+1} + R_i\delta i_{t+1} + R_f\delta f_{t+1} + R_o\delta o_{t+1}\\
+\delta x_t &= W_z\delta z_{t} + W_i\delta z_{t} + W_f\delta f_{t} + W_o\delta o_{t}\\
+\delta W_{\star} &= \sum^T_{t=0} \langle \delta\star_t,x_t\rangle\\
+\delta R_{\star} &= \sum^{T-1}_{t=0} \langle \delta\star_{t+1},y_t\rangle\\
+\delta b_{\star} &= \sum^{T}_{t=0} \delta\star_{t}\\
+\delta p_{i} &= \sum^{T-1}_{t=0} c_t \circ \delta i_{t+1}\\
+\delta p_{f} &= \sum^{T-1}_{t=0} c_t \circ \delta f_{t+1}\\
+\delta p_{o} &= \sum^{T}_{t=0} c_t \circ \delta o_{t}\\
+\end{aligned}
+\end{equation}
+
 \end{document}
