@@ -918,9 +918,7 @@ struct LSTM_scheduler
     int rev_rStart = 0;
     int rev_rEnd = 0;
 
-    // int recurBatchSize = RECUR_BATCH_SIZE;
-    int recurBatchSize = 2;
-    
+    int recurBatchSize = RECUR_BATCH_SIZE;
     
     while (true) {
        // Many layer "scheduling".
@@ -958,13 +956,15 @@ struct LSTM_scheduler
       }
 
       rEnd = rStart + recurBatchSize;
+      if (rEnd > seqLength) rEnd = seqLength;
 
       rev_lStart = numLayers - lEnd;
       rev_lEnd = numLayers - lStart;
       rev_rStart = seqLength - rStart - 1;
       rev_rEnd = seqLength - rEnd - 1;
       // printf("rev_lStart %d rev_lEnd %d rev_rStart %d rev_rEnd %d\n", rev_lStart, rev_lEnd, rev_rStart, rev_rEnd);
-      if (rEnd > seqLength) rEnd = seqLength;
+      
+
       for (int layer = rev_lStart; layer < rev_lEnd; layer++) {                 
           
         for (int i = rev_rStart; i > rev_rEnd; i--) {
@@ -1415,10 +1415,10 @@ int main(int argc, char* argv[]) {
   }
   else if (argc == 1) {
     printf("Running with default settings\n");
-    inputSize = 512;
-    seqLength = 100;
+    inputSize = 32;
+    seqLength = 20;
     numLayers = 4;
-    hiddenSize = 512;
+    hiddenSize = 32;
     miniBatch = 64;
   }
   else {
