@@ -9,18 +9,18 @@ layout: null
 
 In the past two weeks, we first investigated related papers and codes about parallelizing LSTM on GPUs. Based on [a serial code implemented in Python](http://nicodjimenez.github.io/2014/08/08/lstm.html), we added multiple layer LSTM training, and did a few experiment on toy data to make sure our implementation was correct. Besides, we also supported the Peephole variant of LSTM, based on the formulas in [LSTM: A Search Space Odyssey](https://arxiv.org/pdf/1503.04069.pdf).
 
-For the parallel part, we ran the [starter CUDA code](https://devblogs.nvidia.com/parallelforall/optimizing-recurrent-neural-networks-cudnn-5/) on GHC machines. The code only did the forward process of training, so we added the back propagation of LSTM. We were trying to run LSTM on [cuDNN](https://developer.nvidia.com/cudnn) and [TensorFlow](https://www.tensorflow.org/tutorials/recurrent) as baselines, but we have not finished yet because we were trying to get familiar the environment on GHC machines. 
+For the parallel part, we ran the [starter CUDA code](https://devblogs.nvidia.com/parallelforall/optimizing-recurrent-neural-networks-cudnn-5/) on GHC machines. The code only did the forward process of training, so we added the back propagation of LSTM. We were trying to run LSTM on [cuDNN](https://developer.nvidia.com/cudnn) and [TensorFlow](https://www.tensorflow.org/tutorials/recurrent) as baselines, but we have not finished yet because we were trying to get familiar the environment on GHC machines.
 
 ## Goals and Deliverables
 <!--Describe how you are doing with respect to the goals and deliverables stated in your proposal. Do you still believe you will be able to produce all your deliverables? If not, why? What about the "nice to haves"? In your checkpoint writeup we want a new list of goals that you plan to hit for the Parallelism competition.-->
-We think most of our priliminary goals could be achieved before the parallelism competition. Although we are not halfway through the project, the approaches towards our goals are clear. We should be able to finish at least the correctness part, and the performance part will depend on the efforts and time we put in the end. 
+We think most of our priliminary goals could be achieved before the parallelism competition. Although we are not halfway through the project, the approaches towards our goals are clear. We should be able to finish at least the correctness part, and the performance part will depend on the efforts and time we put in the end.
 
 <!--What do you plan to show at the parallelism competition? Will it be a demo? Will it be a graph?-->
 **Our plan is to show a graph of the speedup of our design.**
 ### Plan to achieve:
 * Implement Python-based DSL that can schedule LSTM tasks on GPU and ensure correctness.
 * Identify primitives that can provide generic performance speedups for variants of LSTMs.
-* Implement LSTM with NVIDIA Deep Learning SDK (e.g. cuDNN, cnBLAS) which acts as the baseline of evaluation. 
+* Implement LSTM with NVIDIA Deep Learning SDK (e.g. cuDNN, cnBLAS) which acts as the baseline of evaluation.
 * Evaluate implementations for LSTM variants on LSTM benchmark problems (e.g. acoustic modeling, handwriting recognition and polyphinic music modeling).
 
 ### Hope to achieve:
@@ -39,10 +39,10 @@ We think most of our priliminary goals could be achieved before the parallelism 
 | :--- |:---| :---| :---|
 | Apr 9 -- Apr 15 | Paper and code research; correct code implementation | ✅ | Yuang |
 | Apr 16 -- Apr 22 | CUDA code implementation and optimization | ✅ | Shuyao |
-| Apr 23 -- Apr 26 | Exploration on LSTM variants | | Shuyao |
-| Apr 27 -- Apr 29 | Code auto-generation | | Yuang|
-| Apr 30 -- May 3 | Scheduling optimizations for LSTM variants  | | Shuyao |
-| May 4 -- May 6 | _Cont'd_  | | Yuang |
-| May 7 -- May 10 | Catch-up | | Yuang |
-|  | Performance tuning | | Shuyao |
+| Apr 23 -- Apr 26 | Exploration on LSTM variants | ✅ | Shuyao |
+| Apr 27 -- Apr 29 | Code auto-generation | Ongoing | Yuang|
+| Apr 30 -- May 3 | Scheduling optimizations for LSTM variants  | ✅ | Shuyao |
+| May 4 -- May 6 | _Cont'd_  | ✅ | Yuang |
+| May 7 -- May 10 | Catch-up | ✅ | Yuang |
+|  | Performance tuning | Ongoing | Shuyao |
 | May 11 -- May 12 | Wrap up; presentation | | Both |
