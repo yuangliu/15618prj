@@ -26,7 +26,6 @@ o_{t}&=\sigma (W_{o}x_{t}+R_{o}h_{t-1}+p_o\circ c_{t}+b_{o})\\
 c_{t}&=f_{t}\circ c_{t-1}+i_{t}\circ z_t\\
 h_{t}&=o_{t}\circ h(c_{t})\end{aligned}$$
 
-
 The training for LSTM involves a series of _matrix-matrix multiplications_ (GEMMs) and lots of point-wise operations on vectors.  Therefore, it is both necessary and natural to execute it in parallel. However, writing efficient CUDA code is troublesome for some users and machine learning researchers. Our goal is develop a Python library that generates CUDA code automatically. By identifying the pattern of LSTM variants, our library could schedule them with different schemes, and achieve a good performance in most cases.
 ## Approach
 <!--Tell us how your implementation works. Your description should be sufficiently detailed to provide the course staff a basic understanding of your approach. Again, it might be very useful to include a figure here illustrating components of the system and/or their mapping to parallel hardware.-->
@@ -84,7 +83,7 @@ for layer in layers:
 ```
 
 ###### OPTIMIZATION 4: COMBINING GEMMs
-
+Grouping 2 iteration to update $\delta x$ can achieve performance gain with 1.24x speedup using default setting with each backpropagation iteration.
 ```c++
 for layer in layers:
   for iteration in iterations:
@@ -97,8 +96,10 @@ for layer in layers:
     perform the weights updates
 ```
 #### Step 3: Optimizing with Many layers
-###### OPTIMIZATION 4: STREAMING
-We have created  $layer$ asynchronous cudaStreams and set the GEMMS and elementwise operations from different layes into asynchronous streams  corresponds to the layer index. Therefore,  horizontal dependencies can be ensured. The vertical dependencies are protected by using "cudaStreamWaitEvent" commands.  
+<img src="https://devblogs.nvidia.com/parallelforall/wp-content/uploads/2016/04/image06.png" style="background-color:#666;"/>  
+
+###### OPTIMIZATION 5: STREAMING
+We have created  $layer$ asynchronous cudaStreams and set the GEMMS and elementwise operations from different layes into asynchronous streams  corresponds to the layer index. Therefore,  horizontal dependencies can be ensured. The vertical dependencies are protected by using "cudaStreamWaitEvent" commands.  The backpropagation dependencies can be seen similar as the above graph. Concurrently, $layer$ iteration can be run at the same time.
 
 
 ## Results
