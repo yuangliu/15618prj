@@ -54,6 +54,10 @@ $\delta c_{T} = 0$\\
 \begin{equation}
 \begin{aligned}
 \delta y_t &= \Delta_t + R_z\delta z_{t+1} + R_i\delta i_{t+1} + R_f\delta f_{t+1} + R_o\delta o_{t+1}\\
+\delta o_{t} &\propto \delta y_{t}\\
+\delta f_{t} &\propto \delta y_{t}\\
+\delta i_{t} &\propto \delta y_{t}\\
+\delta z_{t} &\propto \delta y_{t}\\
 \delta x_t &= W_z\delta z_{t} + W_i\delta z_{t} + W_f\delta f_{t} + W_o\delta o_{t}\\
 \delta W_{\star} &= \sum\nolimits^T_{t=0} \langle \delta\star_t,x_t\rangle\\
 \delta R_{\star} &= \sum\nolimits^{T-1}_{t=0} \langle \delta\star_{t+1},y_t\rangle\\
