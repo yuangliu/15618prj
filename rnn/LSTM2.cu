@@ -918,8 +918,7 @@ struct LSTM_scheduler
     int rev_rStart = 0;
     int rev_rEnd = 0;
 
-    int recurBatchSize = 1;
-    
+    int recurBatchSize = RECUR_BATCH_SIZE;
     
     while (true) {
        // Many layer "scheduling".
@@ -957,14 +956,15 @@ struct LSTM_scheduler
       }
 
       rEnd = rStart + recurBatchSize;
+      if (rEnd > seqLength) rEnd = seqLength;
 
       rev_lStart = numLayers - lEnd;
       rev_lEnd = numLayers - lStart;
       rev_rStart = seqLength - rStart - 1;
       rev_rEnd = seqLength - rEnd - 1;
-      // printf("lStart %d lEnd %d rStart %d rEnd %d\n", rev_lStart, rev_lEnd,
-      //    rev_rStart, rev_rEnd);
-      if (rEnd > seqLength) rEnd = seqLength;
+      // printf("rev_lStart %d rev_lEnd %d rev_rStart %d rev_rEnd %d\n", rev_lStart, rev_lEnd, rev_rStart, rev_rEnd);
+      
+
       for (int layer = rev_lStart; layer < rev_lEnd; layer++) {                 
           
         for (int i = rev_rStart; i > rev_rEnd; i--) {
@@ -1004,33 +1004,11 @@ struct LSTM_scheduler
           // printWeight();
 
           cudaErrCheck(cudaGetLastError());
+
           if (i == 1) {
             cudaErrCheck(cudaEventCreate(&events_i[layer][i], cudaEventDisableTiming));
             cudaErrCheck(cudaEventRecord(events_i[layer][i], stream_h[layer])); 
           }
-          // transa = (PRE_TRANSPOSE && (seqLength > 1)) ? CUBLAS_OP_N : CUBLAS_OP_T;
-
-          //W*diff = dx
-          if (layer > 0) {
-            float alpha = 1.f;
-            float beta = 0.f; 
-            cublasErrCheck(cublasSgemm(handle,
-                        CUBLAS_OP_T, transb,
-                        hiddenSize, miniBatch, 4 * hiddenSize,
-                        &alpha,
-                        &T_f[4 * hiddenSize * inputSize + 4 * hiddenSize * hiddenSize + (layer - 1) * 8 * hiddenSize * hiddenSize], 
-                        4 * hiddenSize,
-                        stateGates_diff + 4 * (i * numElements + layer * seqLength  * numElements),
-                        4 * hiddenSize,
-                        &beta,
-                        y_diff + (layer - 1) * numElements * seqLength + i * numElements, 
-                        hiddenSize));
-          }
-
-          if(layer != 0) {
-            cudaErrCheck(cudaEventCreate(&events_h[layer][i], cudaEventDisableTiming));
-            cudaErrCheck(cudaEventRecord(events_h[layer][i], stream_h[layer])); 
-          } 
 
           if (i > 0) {
             //RT * diff = dy
@@ -1047,6 +1025,39 @@ struct LSTM_scheduler
                         &beta,
                         y_diff + layer * numElements * seqLength + (i - 1) * numElements, 
                         hiddenSize));
+          }
+        }
+          // transa = (PRE_TRANSPOSE && (seqLength > 1)) ? CUBLAS_OP_N : CUBLAS_OP_T;
+
+          //W*diff = dx
+        int row = rev_rEnd+1;
+
+        if (layer > 0) {
+          float alpha = 1.f;
+          float beta = 0.f; 
+          cublasErrCheck(cublasSgemm(handle,
+                      CUBLAS_OP_T, transb,
+                      hiddenSize, miniBatch*(rev_rStart - rev_rEnd), 4 * hiddenSize,
+                      &alpha,
+                      &T_f[4 * hiddenSize * inputSize + 4 * hiddenSize * hiddenSize + (layer - 1) * 8 * hiddenSize * hiddenSize], 
+                      4 * hiddenSize,
+                      stateGates_diff + 4 * (row * numElements + layer * seqLength  * numElements),
+                      4 * hiddenSize,
+                      &beta,
+                      y_diff + (layer - 1) * numElements * seqLength + row * numElements, 
+                      hiddenSize));
+        }
+
+        if(layer != 0) {
+          for (int i = rev_rStart; i > rev_rEnd; i--) {
+            cudaErrCheck(cudaEventCreate(&events_h[layer][i], cudaEventDisableTiming));
+            cudaErrCheck(cudaEventRecord(events_h[layer][i], stream_h[layer])); 
+          }
+        } 
+
+        for (int i = rev_rStart; i > rev_rEnd; i--) {
+          if (i > 0) {
+            
             
 
           } 
@@ -1347,6 +1358,9 @@ float LSTMTest(int hiddenSize, int miniBatch, int seqLength, int numLayers, int 
    
   }
 
+  // scheduler.Forward(&loss);
+  // printf("Forward loss is %f\n", loss);
+
   cudaErrCheck(cudaEventRecord(run_end));
   // We're done. Print some checksums
   // if (checkF) {
@@ -1401,10 +1415,10 @@ int main(int argc, char* argv[]) {
   }
   else if (argc == 1) {
     printf("Running with default settings\n");
-    inputSize = 512;
-    seqLength = 100;
+    inputSize = 32;
+    seqLength = 20;
     numLayers = 4;
-    hiddenSize = 512;
+    hiddenSize = 32;
     miniBatch = 64;
   }
   else {
