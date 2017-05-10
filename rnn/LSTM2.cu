@@ -56,7 +56,7 @@
 // Performance is not significantly different, but false saves memory. 
 // False does not work with unfused pointwise ops.
 #define TRAINING (true)
-#define PEEPHOLES 
+// #define PEEPHOLES 
 
 #define HFUNC tanhf
 #define DEHFUNC de_tanhf
@@ -1303,20 +1303,26 @@ float LSTMTest(int hiddenSize, int miniBatch, int seqLength, int numLayers, int 
   float loss; 
   float elapsedTime;  
 
+  cudaEvent_t global_start, global_end, run_start, run_end;
+  cudaErrCheck(cudaEventCreate(&global_start));
+  cudaErrCheck(cudaEventCreate(&global_end));
+  cudaErrCheck(cudaEventCreate(&run_start));
+  cudaErrCheck(cudaEventCreate(&run_end));
+  cudaErrCheck(cudaEventRecord(global_start));
   
+
+
   LSTM_scheduler scheduler(hiddenSize,miniBatch,seqLength,numLayers,inputSize);
 
 
   scheduler.init();
   printf("Initialize success\n");
 
-  cudaEvent_t global_start, global_end;
-  cudaErrCheck(cudaEventCreate(&global_start));
-  cudaErrCheck(cudaEventCreate(&global_end));
+  cudaErrCheck(cudaEventRecord(run_start));
 
-  cudaErrCheck(cudaEventRecord(global_start));
-  scheduler.Forward(&loss);
-  printf("Forward loss is %f\n", loss);
+  
+  // scheduler.Forward(&loss);
+  // printf("Forward loss is %f\n", loss);
 
 
   // if (checkF) {
@@ -1325,6 +1331,9 @@ float LSTMTest(int hiddenSize, int miniBatch, int seqLength, int numLayers, int 
 
 
   for (int i = 0; i < 10; i++) {
+    elapsedTime = scheduler.Forward(&loss);
+    printf("Forward time is %f, loss is %f\n", elapsedTime, loss);
+
     if (TRAINING) {
       // scheduler.clearStates();
       elapsedTime = scheduler.Backward(0.2);
@@ -1335,22 +1344,38 @@ float LSTMTest(int hiddenSize, int miniBatch, int seqLength, int numLayers, int 
 
     // // Timing starts here
     
-    elapsedTime = scheduler.Forward(&loss);
-    printf("Forward time is %f, loss is %f\n", elapsedTime, loss);
+   
   }
+
+  cudaErrCheck(cudaEventRecord(run_end));
   // We're done. Print some checksums
   // if (checkF) {
   //   scheduler.printChecksum();
   // }
+  scheduler.freeMemory();
   cudaErrCheck(cudaEventRecord(global_end));
   cudaErrCheck(cudaEventSynchronize(global_end));
+  
+  
+  
+  
+  
+  cudaErrCheck(cudaEventElapsedTime(&elapsedTime, run_start, run_end));
+  printf("Running time used %f ms, avg %f\n", elapsedTime, elapsedTime/10);
+
+
   cudaErrCheck(cudaEventElapsedTime(&elapsedTime, global_start, global_end));
-  
-  cudaErrCheck(cudaDeviceSynchronize());
-  
   printf("Total time used %f ms\n", elapsedTime);
 
-  scheduler.freeMemory();
+
+  cudaErrCheck(cudaEventElapsedTime(&elapsedTime, global_start, run_start));
+  printf("Initialize time used %f ms\n", elapsedTime);
+
+  cudaErrCheck(cudaEventElapsedTime(&elapsedTime, run_end, global_end));
+  printf("Memory free time used %f ms\n", elapsedTime);
+  // cudaErrCheck(cudaDeviceSynchronize());
+
+  
 
   return 0;
 }
