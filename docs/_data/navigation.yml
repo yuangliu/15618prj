@@ -1,5 +1,8 @@
 # Belongs at: /_data/navigation.yml
 
+- title: Final
+  url: final
+
 - title: Checkpoint
   url: checkpoint
 

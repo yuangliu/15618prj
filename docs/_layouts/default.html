@@ -15,9 +15,13 @@
         MathJax.Hub.Queue(["Typeset",MathJax.Hub]);
       }
       $(document).ready(function () {
-        $("#content").load("checkpoint.html", main_loaded);
-        select($("#checkpoint"));
+        $("#content").load("final.html", main_loaded);
+        select($("#final"));
 
+        $("#final").click(function () {
+          $("#content").load("final.html", main_loaded);
+          select($("#final"));
+        });
         $("#checkpoint").click(function () {
           $("#content").load("checkpoint.html", main_loaded);
           select($("#checkpoint"));
