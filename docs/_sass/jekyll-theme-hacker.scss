@@ -6,10 +6,10 @@ body {
   margin: 0;
   padding: 0;
   background: #151515 url("../images/bkg.png") 0 0;
-  color: #eaeaea;
-  font-size: 16px;
+  color: #bfbfbf;
+  font-size: 20px;
   line-height: 1.5;
-  font-family: Monaco, "Bitstream Vera Sans Mono", "Lucida Console", Terminal, monospace;
+  font-family: sans-serif /*Monaco, "Bitstream Vera Sans Mono", "Lucida Console", Terminal, monospace;*/
 }
 
 /* General & 'Reset' Stuff */
@@ -69,7 +69,7 @@ header h1:before {
 header h2 {
   font-size: 18px;
   font-weight: 300;
-  color: #666;
+  color: #cccccc;
 }
 
 #downloads .btn {
@@ -91,7 +91,7 @@ section img {
 
 h1, h2, h3, h4, h5, h6 {
   font-weight: normal;
-  font-family: Monaco, "Bitstream Vera Sans Mono", "Lucida Console", Terminal, monospace;
+  font-family: sans-serif; /*Monaco, "Bitstream Vera Sans Mono", "Lucida Console", Terminal, monospace;*/
   color: #b5e853;
   letter-spacing: -0.03em;
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.1),

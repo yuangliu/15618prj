@@ -30,7 +30,7 @@ The training for LSTM involves a series of _matrix-matrix multiplications_ (GEMM
 ## Approach
 <!--Tell us how your implementation works. Your description should be sufficiently detailed to provide the course staff a basic understanding of your approach. Again, it might be very useful to include a figure here illustrating components of the system and/or their mapping to parallel hardware.-->
 Our optimization approach are mainly inspired by the forward propagation  implementation of [Jeremy Appleyard](https://devblogs.nvidia.com/parallelforall/optimizing-recurrent-neural-networks-cudnn-5/). We will illustrate how these optimization ideas are applied in our back propagation implementation.  
-#### Step 1: Optimizing a Single iteration
+### Step 1: Optimizing a Single iteration
 The back propagation process of each iteration includes a series of point-wise operations:
 
 $$\begin{aligned}
@@ -57,9 +57,9 @@ $$\begin{aligned}
 
 As illustrated in the above equations, the back propagation process has stronger recurrent dependencies since $$\delta y_t$$ is relied on the $$\delta i_{t+1},\delta f_{t+1}, \delta o_{t+1},  \delta z_{t+1}$$ from the previous iteration as well as $$\Delta_t = \delta x_t$$ from the upper layer. Therefore the propagation of deltas needs to be performed  iteration by iteration.
 
-###### OPTIMIZATION 1: FUSING POINT-WISE OPERATIONS
+##### OPTIMIZATION 1: FUSING POINT-WISE OPERATIONS
 To improve arithmetic density, we fused all point-wise operations together into one kernel with $$\text{hiddenSize}\times \text{miniBatch}$$ threads. The calculation of peephole gradients are also performed inside. To avoid updating to the same memory address, we tradeoff memory for efficiency by allocating totally $$3  \times\text{hiddenSize}\times \text{miniBatch}$$ space for $$\delta p_{i,f,o}$$. After the point-wise operation, **cublasSgemv** is used to aggregate all the gradients together.
-###### OPTIMIZATION 2: COMBINING GEMM OPERATIONS
+##### OPTIMIZATION 2: COMBINING GEMM OPERATIONS
 Originally $$W_z\delta z_{t} + W_i\delta z_{t} + W_f\delta f_{t} + W_o\delta o_{t}$$ and $$R_z\delta z_{t+1} + R_i\delta i_{t+1} + R_f\delta f_{t+1} + R_o\delta o_{t+1}$$ together requires eight GEMMs to be calculated. By aggregating $$\delta_{i,f,z,o}$$ into one matrix $$S$$ with size of $$4\cdot \text{hiddenSize} \times \text{miniBatch}$$, only two GEMMs (i.e. $$W^TS$$ and $$R^TS$$) are needed.
 
 
@@ -73,9 +73,9 @@ for layer in layers:
     accumulate the weights different
 perform the weights updates
 ```
-#### Step 2: Optimizing with Each Layer
+### Step 2: Optimizing with Each Layer
 
-###### OPTIMIZATION 3: Group Weight Updates
+##### OPTIMIZATION 3: Group Weight Updates
 The weight updates is heavy if performed accumulated. Also, it requires extra memory allocation to store the temporary gradient. By grouping the weight updates process, a larger matrix can be used in each iteration and no extra memory is needed. The optimized pseudo code follows.
 ```c++
 for layer in layers:
@@ -87,7 +87,7 @@ for layer in layers:
     perform the weights updates
 ```
 
-###### OPTIMIZATION 4: COMBINING GEMMs
+##### OPTIMIZATION 4: COMBINING GEMMs
 Grouping 2 iteration to update $$\delta x$$ can achieve performance gain with 1.24x speedup using default setting with each back-propagation iteration.
 ```c++
 for layer in layers:
@@ -100,10 +100,10 @@ for layer in layers:
   if end of layer:
     perform the weights updates
 ```
-#### Step 3: Optimizing with Many layers
+### Step 3: Optimizing with Many layers
 <img src="image06.png" style="background-color:#0;"/>  
 
-###### OPTIMIZATION 5: STREAMING
+##### OPTIMIZATION 5: STREAMING
 We have created  $$layer$$ asynchronous cudaStreams and set the GEMMS and element-wise operations from different layers into asynchronous streams  corresponds to the layer index. Therefore,  horizontal dependencies can be ensured. The vertical dependencies are protected by using "cudaStreamWaitEvent" commands.  The back-propagation dependencies can be seen similar as the above graph. Concurrently, $$layer$$ iteration can be run at the same time.
 
 
