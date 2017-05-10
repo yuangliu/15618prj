@@ -63,7 +63,7 @@ To improve arithmetic density, we fused all point-wise operations together into 
 Originally $$W_z\delta z_{t} + W_i\delta z_{t} + W_f\delta f_{t} + W_o\delta o_{t}$$ and $$R_z\delta z_{t+1} + R_i\delta i_{t+1} + R_f\delta f_{t+1} + R_o\delta o_{t+1}$$ together requires eight GEMMs to be calculated. By aggregating $$\delta_{i,f,z,o}$$ into one matrix $$S$$ with size of $$4\cdot \text{hiddenSize} \times \text{miniBatch}$$, only two GEMMs (i.e. $$W^TS$$ and $$R^TS$$) are needed.
 
 
-By using the above two optimizations, the delta propagation part for each iteration contains only one point-wise operation and two GEMMs. Pseuduocode for the method follows.
+By using the above two optimizations, the delta propagation part for each iteration contains only one point-wise operation and two GEMMs. Pseudo code for the method follows.
 ```c++
 for layer in layers:
   for iteration in iterations:
@@ -88,7 +88,7 @@ for layer in layers:
 ```
 
 ###### OPTIMIZATION 4: COMBINING GEMMs
-Grouping 2 iteration to update $\delta x$ can achieve performance gain with 1.24x speedup using default setting with each backpropagation iteration.
+Grouping 2 iteration to update $$\delta x$$ can achieve performance gain with 1.24x speedup using default setting with each back-propagation iteration.
 ```c++
 for layer in layers:
   for iteration in iterations:
@@ -104,7 +104,7 @@ for layer in layers:
 <img src="image06.png" style="background-color:#0;"/>  
 
 ###### OPTIMIZATION 5: STREAMING
-We have created  $layer$ asynchronous cudaStreams and set the GEMMS and elementwise operations from different layes into asynchronous streams  corresponds to the layer index. Therefore,  horizontal dependencies can be ensured. The vertical dependencies are protected by using "cudaStreamWaitEvent" commands.  The backpropagation dependencies can be seen similar as the above graph. Concurrently, $layer$ iteration can be run at the same time.
+We have created  $$layer$$ asynchronous cudaStreams and set the GEMMS and element-wise operations from different layers into asynchronous streams  corresponds to the layer index. Therefore,  horizontal dependencies can be ensured. The vertical dependencies are protected by using "cudaStreamWaitEvent" commands.  The back-propagation dependencies can be seen similar as the above graph. Concurrently, $$layer$$ iteration can be run at the same time.
 
 
 ## Results
