@@ -15,9 +15,13 @@
         MathJax.Hub.Queue(["Typeset",MathJax.Hub]);
       }
       $(document).ready(function () {
-        $("#content").load("checkpoint.html", main_loaded);
-        select($("#checkpoint"));
+        $("#content").load("final.html", main_loaded);
+        select($("#final"));
 
+        $("#final").click(function () {
+          $("#content").load("final.html", main_loaded);
+          select($("#final"));
+        });
         $("#checkpoint").click(function () {
           $("#content").load("checkpoint.html", main_loaded);
           select($("#checkpoint"));
@@ -44,15 +48,19 @@
         <h2>{{ site.author | default: site.github.owner_name }}</h2>
 
         <section id="downloads">
-          {% if site.show_downloads %}
-            <a href="{{ site.github.zip_url }}" class="btn">Download as .zip</a>
-            <a href="{{ site.github.tar_url }}" class="btn">Download as .tar.gz</a>
-            <a href="{{ site.github.repository_url }}" class="btn btn-github"><span class="icon"></span>View on GitHub</a>
-          {% endif %}
+          <p>
+            {% if site.show_downloads %}
+              <a href="{{ site.github.zip_url }}" class="btn">Download as .zip</a>
+              <a href="{{ site.github.tar_url }}" class="btn">Download as .tar.gz</a>
+              <a href="{{ site.github.repository_url }}" class="btn btn-github"><span class="icon"></span>View on GitHub</a>
+            {% endif %}
+          </p>
 
-          {% for entry in site.data.navigation %}
-            <a href="#" class="btn" id="{{ entry.url }}" class="btn">{{ entry.title }}</a>
-          {% endfor %}
+          <p>
+            {% for entry in site.data.navigation %}
+              <a href="#" class="btn" id="{{ entry.url }}" class="btn">{{ entry.title }}</a>
+            {% endfor %}
+          </p>
 
         </section>
       </div>

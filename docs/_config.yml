@@ -17,4 +17,4 @@ title: "CuLSTM:"
 author: Yuang Liu (yuangl) and Shuyao Bi (shuyaob)
 description: A Python-based DSL for LSTMs on GPU
 markdown: kramdown
-show_downloads: false
+show_downloads: true
