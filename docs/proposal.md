@@ -20,7 +20,7 @@ Despite similar ideas, different LSTM variants have individual network structure
 <!--![{\displaystyle {\begin{aligned}f_{t}&=\sigma _{g}(W_{f}x_{t}+U_{f}h_{t-1}+b_{f})\\\\i_{t}&=\sigma _{g}(W_{i}x_{t}+U_{i}h_{t-1}+b_{i})\\\\o_{t}&=\sigma _{g}(W_{o}x_{t}+U_{o}h_{t-1}+b_{o})\\\\c_{t}&=f_{t}\circ c_{t-1}+i_{t}\circ \sigma _{c}(W_{c}x_{t}+U_{c}h_{t-1}+b_{c})\\\\h_{t}&=o_{t}\circ \sigma _{h}(c_{t})\end{aligned}}}](eqn.png)-->
 $$\begin{aligned}f_{t}&=\sigma _{g}(W_{f}x_{t}+U_{f}h_{t-1}+b_{f})\\i_{t}&=\sigma _{g}(W_{i}x_{t}+U_{i}h_{t-1}+b_{i})\\o_{t}&=\sigma _{g}(W_{o}x_{t}+U_{o}h_{t-1}+b_{o})\\c_{t}&=f_{t}\circ c_{t-1}+i_{t}\circ \sigma _{c}(W_{c}x_{t}+U_{c}h_{t-1}+b_{c})\\h_{t}&=o_{t}\circ \sigma _{h}(c_{t})\end{aligned}$$
 
-The training for LSTM involves a series of matrix-matrix multiplications (GEMMs) and lots of point-wise operations on vectors.  Therefore, it is both necessary and natural to execute it in parallel. However, writing efficient CUDA code is troublesome for some users and maching learning researchers. Our goal is develop a Python library that generates CUDA code automatically. By identifying the pattern of LSTM variants, our library could schedule them with different schemes, and achieve a good performance in most cases.
+The training for LSTM involves a series of matrix-matrix multiplications (GEMMs) and lots of point-wise operations on vectors.  Therefore, it is both necessary and natural to execute it in parallel. However, writing efficient CUDA code is troublesome for some users and machine learning researchers. Our goal is develop a Python library that generates CUDA code automatically. By identifying the pattern of LSTM variants, our library could schedule them with different schemes, and achieve a good performance in most cases.
 
 ## Challenges
 <!--Describe why the problem is challenging. What aspects of the problem might make it difficult to parallelize? In other words, what to you hope to learn by doing the project?
@@ -29,7 +29,7 @@ The training for LSTM involves a series of matrix-matrix multiplications (GEMMs)
 - Describe constraints: What are the properties of the system that make mapping the workload to it challenging?
 -->
 * LSTM training involves multiple layers, each with multiple iterations performed in a cell. In each iteration, eight GEMMs need to be performed with input from former iteration and former layer. Moreover, lots of point-wise operations are to be performed. Since there exist dependencies between tasks within iteration, among iterations and layers, it is challenging to exploit parallism that can fully utilize hardware resources while maintaining correctness of result and generality of translation.
-* The output of previous iteration will be used as the input of each iteration. The data transfer can therefore generate a lot of communicationS between kernel and device memory. 
+* The output of previous iteration will be used as the input of each iteration. The data transfer can therefore generate a lot of communicationS between kernel and device memory.
 * LSTM has many variants with different network structures and formulas. Identifying and finding a generic solution suitable for all variants of LSTMs is difficult.
 
 
@@ -47,7 +47,7 @@ The training for LSTM involves a series of matrix-matrix multiplications (GEMMs)
 ### Plan to achieve:
 * Implement Python-based DSL that can schedule LSTM tasks on GPU and ensure correctness.
 * Identify primitives that can provide generic performance speedups for variants of LSTMs.
-* Implement LSTM with NVIDIA Deep Learning SDK (e.g. cuDNN, cnBLAS) which acts as the baseline of evaluation. 
+* Implement LSTM with NVIDIA Deep Learning SDK (e.g. cuDNN, cnBLAS) which acts as the baseline of evaluation.
 * Evaluate implementations for LSTM variants on LSTM benchmark problems (e.g. acoustic modeling, handwriting recognition and polyphinic music modeling).
 
 ### Hope to achieve:
