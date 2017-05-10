@@ -27,14 +27,39 @@ The training for LSTM involves a series of _matrix-matrix multiplications_ (GEMM
 
 ## Results
 <!--How successful were you at achieving your goals? We expect results sections to differ from project to project, but we expect your evaluation to be very thorough (your project evaluation is a great way to demonstrate you understood topics from this course).-->
+### Comparison
+
+| Parameters | Small | Medium | Large |
+| :--- | :--- | :--- | :--- |
+| Sequence length | 1 | 10 | 20 |
+| Network layer | 1 | 2 | 4 |
+| Hidden size | 1 | 10 | 32 |
+| Mini-batch size | 1 | 10 | 64 |
+| Input size | 1 | 10 | 32 |
+| Peephole | Y | Y | Y |
+
+
+<img src="comp1.png" style="background-color:#666;"/>  
+**(a)** *Small network.*  
+<img src="comp2.png" style="background-color:#666;"/>  
+**(b)** *Medium network. (log-log)*  
+<img src="comp3.png" style="background-color:#666;"/>  
+**(c)** *Large network. (log-log)*  
+**Figure 2:** *Comparison with sequential code and TensorFlow. (ms)*
+
+### Training Time
+
+<img src="train.png" style="background-color:#666;"/>  
+**Figure 3:** *Forward and backward cost. (ms)*
+
 ### Data Movement Cost
-Data movement is a main source of time and energy cost for GPU applications. We recorded the time of data initialization and memory free, and showed the result in Fig. 2. The absolute time (in ms) and percentage of each part are shown in the figure. We can see from Fig. 2(a) that, when we train the network for 10 iterations, the cost of initialization is relatively high. However, in Fig. 2(b), as we train for more iterations, it remains constant, and becomes trivial relative to running time.
+Data movement is a main source of time and energy cost for GPU applications. We recorded the time of data initialization and memory free on default setting, and showed the result in Fig. 2. The absolute time (in ms) and percentage of each part are shown in the figure. We can see from Fig. 4(a) that, when we train the network for 10 iterations, the cost of initialization is relatively high. However, in Fig. 2(b), as we train for more iterations, it remains constant, and becomes trivial relative to running time.
 
 <img src="data1.png" style="background-color:#666;"/>  
-**(a)** *10 iterations.*
+**(a)** *10 iterations.*  
 <img src="data2.png" style="background-color:#666;"/>  
 **(b)** *1,000 iterations.*  
-**Figure 2:** *Cost of data movement. (ms)*
+**Figure 4:** *Cost of data movement. (ms)*
 
 
 ## References
