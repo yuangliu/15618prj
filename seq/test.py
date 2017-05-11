@@ -2,7 +2,8 @@ import numpy as np
 
 from multilstm import LstmParam, LstmParamPeephole, LstmNetwork, sigmoid, linear, tanh
 import multilstm
-import imdb
+import time
+import sys
 
 class ToyLossLayer:
     """
@@ -10,23 +11,19 @@ class ToyLossLayer:
     """
     @classmethod
     def loss(self, pred, label):
-        #return (pred[0] - label) ** 2
         s = 0.0
         for p in pred:
             s += p
-            print p
-        return s
+        #return s
+        return (pred[0] - label[0]) ** 2
 
     @classmethod
     def bottom_diff(self, pred, label):
-        #diff = np.zeros_like(pred)
-        #diff[0] = 2 * (pred[0] - label[0])
-        s = 0.0
-        for p in pred:
-            s += p
-        return s
-        #return diff
-
+        diff = np.zeros_like(pred)
+        diff[0] = 2 * (pred[0] - label[0])
+        #diff = np.full_like(pred, 1)
+        return diff
+'''
 def example_0():
     # learns to repeat simple sequence from random inputs
     np.random.seed(0)
@@ -266,25 +263,26 @@ def example_3_multi():
 
         print("loss: " + str(loss/100))
         lstm_net.apply_diff(0.01)
-
-def example_4_multi():
+'''
+def example_4_multi(argv):
     # parameters for input data dimension and lstm cell count 
-    mem_cell_ct = 8
-    x_dim = 4
-    layer = 2
-    tt = 2
-    eg = 4
+    mem_cell_ct = int(argv[3].strip())
+    x_dim = int(argv[5].strip())
+    layer = int(argv[2].strip())
+    tt = int(argv[1].strip())
+    eg = int(argv[4].strip())
     lstm_param = LstmParamPeephole(mem_cell_ct, x_dim) 
     lstm_hidden_param = LstmParamPeephole(mem_cell_ct, mem_cell_ct) 
     lstm_net = LstmNetwork(lstm_param, lstm_hidden_param, layer, peephole=True)
     x_examples = [0.2 for i in range(eg*tt*x_dim)]
-    y_examples = [0.2 for i in range(eg*tt*x_dim)]
+    y_examples = [1 for i in range(eg*tt*x_dim)]
 
-    for cur_iter in range(1):
+    start = time.time()
+    for epoch in range(1000):
         loss = 0
-        print("cur iter: " + str(cur_iter))
+        #print("cur iter: " + str(cur_iter))
         for example in range(eg):
-            print example
+            #print example
             x_example=[]
             y_example=[]
             for t in range(tt):
@@ -296,9 +294,17 @@ def example_4_multi():
             loss += lstm_net.y_list_is([y_example[t] for t in range(tt)], ToyLossLayer)
             lstm_net.x_list_clear()
 
-        print("loss: " + str(loss))
-        lstm_net.apply_diff(0.01)
+        #print("loss: " + str(loss))
+        lstm_net.apply_diff(0.2)
+        if epoch == 0 or epoch == 9 or epoch == 99 or epoch == 999:
+            end = time.time()
+            print "SEQ\tEpoch\t%d\tTime\t%f" % (epoch+1, (end - start)*1000)
+            if epoch == 0:
+                start2 = time.time()
+    end = time.time()
+    print "TF\tEpoch\tAVG\tTime\t%f" % ((end - start2)/999*1000)
+
 
 if __name__ == "__main__":
-    example_4_multi()
+    example_4_multi(sys.argv)
 

@@ -30,6 +30,7 @@ def derivative(func):
     elif func == sigmoid:
         return sigmoid_derivative
 
+
 # createst uniform random array w/ values in [a,b) and shape args
 def rand_arr(a, b, *args): 
     np.random.seed(0)
@@ -69,6 +70,7 @@ class LstmParam:
         self.bi -= lr * self.bi_diff
         self.bf -= lr * self.bf_diff
         self.bo -= lr * self.bo_diff
+
         # reset diffs to zero
         self.wg_diff = np.zeros_like(self.wg)
         self.wi_diff = np.zeros_like(self.wi) 
@@ -96,13 +98,10 @@ class LstmParamPeephole(LstmParam):
         self.po -= lr * self.po_diff
         self.pi -= lr * self.pi_diff
         self.pf -= lr * self.pf_diff
-        #print self.po_diff
-        #print self.pi_diff
-        #print self.pf_diff
         # reset diffs to zero
         self.pi_diff = np.zeros_like(self.pi) 
         self.pf_diff = np.zeros_like(self.pf) 
-        self.po_diff = np.zeros_like(self.po) 
+        self.po_diff = np.zeros_like(self.po)
 
 class LstmState:
     def __init__(self, mem_cell_ct, x_dim):
@@ -152,7 +151,7 @@ class LstmNode:
     def top_diff_is(self, top_diff_h, top_diff_s):
         # notice that top_diff_s is carried along the constant error carousel
         ds = self.h_func_derivative(self.state.hs) * self.state.o * top_diff_h + top_diff_s
-        do = self.h_func(self.state.s) * top_diff_h
+        do = self.state.hs * top_diff_h
         di = self.state.g * ds
         dg = self.state.i * ds
         df = self.s_prev * ds
@@ -211,8 +210,9 @@ class LstmNodePeephole(LstmNode):
     
     def top_diff_is(self, top_diff_h, top_diff_s):
         # notice that top_diff_s is carried along the constant error carousel
-        do = self.h_func(self.state.s) * top_diff_h
-        ds = self.h_func_derivative(self.state.hs) * self.state.o * top_diff_h + self.param.po * do + top_diff_s
+        do = self.state.hs * top_diff_h
+        do_input = sigmoid_derivative(self.state.o) * do 
+        ds = self.h_func_derivative(self.state.hs) * self.state.o * top_diff_h + self.param.po * do_input + top_diff_s
         di = self.state.g * ds
         dg = self.state.i * ds
         df = self.s_prev * ds
@@ -220,7 +220,6 @@ class LstmNodePeephole(LstmNode):
         # diffs w.r.t. vector inside sigma / tanh function
         di_input = sigmoid_derivative(self.state.i) * di 
         df_input = sigmoid_derivative(self.state.f) * df 
-        do_input = sigmoid_derivative(self.state.o) * do 
         dg_input = self.g_func_derivative(self.state.g) * dg
 
         # diffs w.r.t. inputs
@@ -232,9 +231,9 @@ class LstmNodePeephole(LstmNode):
         self.param.bf_diff += df_input
         self.param.bo_diff += do_input
         self.param.bg_diff += dg_input
-        self.param.pi_diff += self.s_prev * di
-        self.param.pf_diff += self.s_prev * df
-        self.param.po_diff += self.state.s * do
+        self.param.pi_diff += self.s_prev * di_input
+        self.param.pf_diff += self.s_prev * df_input
+        self.param.po_diff += self.state.s * do_input
 
         # compute bottom diff
         dxc = np.zeros_like(self.xc)
@@ -244,7 +243,7 @@ class LstmNodePeephole(LstmNode):
         dxc += np.dot(self.param.wg.T, dg_input)
 
         # save bottom diffs
-        self.state.bottom_diff_s = ds * self.state.f + self.param.pi * di + self.param.pf * df
+        self.state.bottom_diff_s = ds * self.state.f + self.param.pi * di_input + self.param.pf * df_input
         self.state.bottom_diff_h = dxc[self.param.x_dim:]
         self.state.bottom_diff_x = dxc[:self.param.x_dim]
 
@@ -277,7 +276,6 @@ class LstmNetwork():
                 diff_h = loss_layer.bottom_diff(self.lstm_node_list[ll][idx].state.h, y_list[idx])
             else:
                 diff_h = self.lstm_node_list[ll + 1][idx].state.bottom_diff_x
-            #print diff_h
             # here s is not affecting loss due to h(t+1), hence we set equal to zero
             diff_s = np.zeros(self.lstm_param[ll].mem_cell_ct)
             self.lstm_node_list[ll][idx].top_diff_is(diff_h, diff_s)
