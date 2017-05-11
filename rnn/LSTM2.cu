@@ -58,11 +58,6 @@
 #define TRAINING (true)
 // #define PEEPHOLES 
 
-#define HFUNC tanhf
-#define DEHFUNC de_tanhf
-#define GFUNC tanhf
-#define DEGFUNC de_tanhf
-
 #ifndef PERFOPTS
    #define PERFOPTS (31)
 #endif
@@ -73,6 +68,13 @@
 #define PRE_TRANSPOSE ((PERFOPTS & 8))
 #define RECUR_BATCH_SIZE (((PERFOPTS & 16) ? 2 : 1))
 #define RECUR_BATCH_BP_SIZE (((PERFOPTS & 16) ? 4 : 1))
+
+#define HFUNC tanhf
+#define DEHFUNC de_tanhf
+#define GFUNC tanhf
+#define DEGFUNC de_tanhf
+#define LOSSFUNC entropye
+#define DELOSSFUNC de_entropye
 
 // Define some error checking macros.
 #define cudaErrCheck(stat) { cudaErrCheck_((stat), __FILE__, __LINE__); }
@@ -117,6 +119,22 @@ __forceinline__ __device__ float de_linearf(float out) {
 
 __forceinline__ __device__ float de_tanhf(float out) {
    return 1.f - pow(out, 2);
+}
+
+__forceinline__ __device__ float squaree(float output, float target) {
+  return pow(output - target, 2);
+}
+
+__forceinline__ __device__ float de_squaree(float output, float target) {
+  return 2 * (output - target);
+}
+
+__forceinline__ __device__ float entropye(float output, float target) {
+  return -(target * logf(output) + (1.f - target) * logf(1.f - output));
+}
+
+__forceinline__ __device__ float de_entropye(float output, float target) {
+  return -(target / output + (1.f - target) / (output - 1.f));
 }
 
 __global__ void pw_de_tanh(float *y, float *a, int n) {
@@ -346,9 +364,9 @@ __global__ void elementWise_fp(int hiddenSize, int miniBatch,
   if (label != NULL) {
     if (mask[index % hiddenSize] == 1) {
 
-      loss[index] = pow(val - label[index], 2);
+      loss[index] = LOSSFUNC(val, label[index]);
       if (training)
-        y_diff[index] = 2*(val - label[index]);
+        y_diff[index] = DELOSSFUNC(val, label[index]);
     } else {
       if (training)
         y_diff[index] = 0;
@@ -513,7 +531,8 @@ struct LSTM_scheduler
       init_helper(mask + 1, 0, hiddenSize-1);   
       
     }
-    cudaErrCheck(cudaMemcpy(mask, mask_, numElements * seqLength * sizeof(float), cudaMemcpyHostToDevice)); 
+    else
+      cudaErrCheck(cudaMemcpy(mask, mask_, numElements * seqLength * sizeof(float), cudaMemcpyHostToDevice)); 
   }
 
   void set_weight(float * T_f_, float * bias_, float * peeps_) {
@@ -1433,7 +1452,7 @@ float LSTMTest(int hiddenSize, int miniBatch, int seqLength, int numLayers, int 
 
     if (TRAINING) {
       // scheduler.clearStates();
-      elapsedTime = scheduler.Backward(0.2);
+      elapsedTime = scheduler.Backward(0.01);
       printf("Backward time is %f\n", elapsedTime);
     }
 
