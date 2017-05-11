@@ -482,6 +482,9 @@ struct LSTM_scheduler
   cublasOperation_t transa;
   cublasOperation_t transb;
 
+  curandGenerator_t rng;
+    
+
   void init_helper(float * device_ptr, float data, int size) {
     if (size == 0)
       return;
@@ -493,19 +496,48 @@ struct LSTM_scheduler
     cudaErrCheck(cudaMemcpy(device_ptr, host_ptr, size * sizeof(float), cudaMemcpyHostToDevice));
   }
 
+
   void set_input(float * input) {
+
     cudaErrCheck(cudaMemcpy(i_data, input, inputLayerSize * sizeof(float), cudaMemcpyHostToDevice));
   }
 
   void set_label(float * label_) {
+    
     cudaErrCheck(cudaMemcpy(label, label_, numElements * seqLength * sizeof(float), cudaMemcpyHostToDevice));
   }
 
+  void set_mask(float * mask_) {
+    if (mask_ == NULL) {
+      init_helper(mask, 1, 1);
+      init_helper(mask + 1, 0, hiddenSize-1);   
+      
+    }
+    cudaErrCheck(cudaMemcpy(mask, mask_, numElements * seqLength * sizeof(float), cudaMemcpyHostToDevice)); 
+  }
+
   void set_weight(float * T_f_, float * bias_, float * peeps_) {
-    cudaErrCheck(cudaMemcpy(T_f, T_f_, weightSize * sizeof(float), cudaMemcpyHostToDevice)); 
-    cudaErrCheck(cudaMemcpy(bias, bias_, hiddenSize * 4 * numLayers * sizeof(float), cudaMemcpyHostToDevice)); 
+    if (T_f_ != NULL) {
+      cudaErrCheck(cudaMemcpy(T_f, T_f_, weightSize * sizeof(float), cudaMemcpyHostToDevice)); 
+    }
+    else {
+      curandErrCheck(curandGenerateUniform(rng, T_f, weightSize));
+    }
+    
+    if (bias_ != NULL) {
+      cudaErrCheck(cudaMemcpy(bias, bias_, hiddenSize * 4 * numLayers * sizeof(float), cudaMemcpyHostToDevice)); 
+    }
+    else {
+      curandErrCheck(curandGenerateUniform(rng, bias, hiddenSize * 4 * numLayers));
+    }
+
     #ifdef PEEPHOLES
-    cudaErrCheck(cudaMemcpy(peeps, peeps_, hiddenSize * 3 * numLayers * sizeof(float), cudaMemcpyHostToDevice)); 
+    if (peeps_!= NULL) {
+      cudaErrCheck(cudaMemcpy(peeps, peeps_, hiddenSize * 3 * numLayers * sizeof(float), cudaMemcpyHostToDevice)); 
+    }
+    else {
+      curandErrCheck(curandGenerateUniform(rng, bias, hiddenSize * 4 * numLayers));
+    }
     #endif 
   }
 
@@ -523,12 +555,16 @@ struct LSTM_scheduler
     
     numElements = hiddenSize * miniBatch;
     inputNumElements = inputSize * miniBatch;
-    inputLayerSize = inputNumElements * miniBatch;
+    inputLayerSize = inputNumElements * seqLength;
 
     weightSize = inputSize * hiddenSize * 4 + hiddenSize * hiddenSize * 4 + (numLayers - 1) * hiddenSize * hiddenSize * 8;
 
 
     cublasErrCheck(cublasCreate(&handle));
+    curandErrCheck(curandCreateGenerator(&rng, CURAND_RNG_PSEUDO_DEFAULT));
+    curandErrCheck(curandSetPseudoRandomGeneratorSeed(rng, 1337ull));
+
+
     stream_i = (cudaStream_t*)malloc(numLayers * sizeof(cudaStream_t));
     stream_h = (cudaStream_t*)malloc(numLayers * sizeof(cudaStream_t));
     
@@ -552,12 +588,13 @@ struct LSTM_scheduler
        events_i[i] = (cudaEvent_t*)malloc(seqLength * sizeof(cudaEvent_t));
        events_h[i] = (cudaEvent_t*)malloc(seqLength * sizeof(cudaEvent_t));
     }
+
   }
 
 
   
 
-  void init() {
+  void init(float* mask_ = NULL) {
     
     // cudaErrCheck(cudaMalloc((void**)&h_data, (seqLength + 1) * (inputNumElements + (numLayers - 1) * numElements) * sizeof(float)));
     cudaErrCheck(cudaMalloc((void**)&i_data, (seqLength * inputNumElements + seqLength * numLayers  * numElements) * sizeof(float)));
@@ -575,10 +612,9 @@ struct LSTM_scheduler
     cudaErrCheck(cudaMalloc((void**)&loss, numElements * seqLength * sizeof(float)));
     cudaErrCheck(cudaMalloc((void**)&mask, hiddenSize * sizeof(float)));
 
-    init_helper(mask, 1, 1);
-    init_helper(mask + 1, 0, hiddenSize-1);
-    init_helper(label, 1, numElements * seqLength);
+    set_mask(mask_);
     init_helper(loss, 0, numElements * seqLength);
+    init_helper(label, 1, numElements * seqLength);
 
     #ifdef PEEPHOLES
       cudaErrCheck(cudaMalloc((void**)&peeps, numLayers * hiddenSize * 3 * sizeof(float)));
@@ -612,10 +648,7 @@ struct LSTM_scheduler
     }
 
     // Initialise with random values.
-    // curandGenerator_t rng;
-    // curandErrCheck(curandCreateGenerator(&rng, CURAND_RNG_PSEUDO_DEFAULT));
-    // curandErrCheck(curandSetPseudoRandomGeneratorSeed(rng, 1337ull));
-    // curandErrCheck(curandGenerateUniform(rng, h_data, (seqLength + 1) * (numLayers) * numElements));
+        // curandErrCheck(curandGenerateUniform(rng, h_data, (seqLength + 1) * (numLayers) * numElements));
     // curandErrCheck(curandGenerateUniform(rng, c_data, (seqLength + 1) * (numLayers) * numElements));
     // cudaErrCheck(cudaMemset(c_data, 0,  (seqLength + 1) * (numLayers) * numElements  * sizeof(float)));
     init_helper(c_data, 0, (seqLength + 1) * (numLayers) * numElements);
@@ -667,21 +700,19 @@ struct LSTM_scheduler
   }
 
   void clearStates(float * input=NULL, float * label=NULL) {
-    // if(TRAINING) {
+    if(TRAINING) {
 
-      // set_input(input);
+      if(input) set_input(input);
+      if(label) set_label(label);
 
-    // }
-
-   
+    }
       // init_helper(y_diff, 0, seqLength*(numLayers-1)*numElements);
       // init_helper(y_diff+seqLength*(numLayers-1)*numElements, 1, seqLength * numElements);
       // init_helper(peeps_diff, 0, 3 * numElements * numLayers * seqLength);
 
        // curandErrCheck(curandGenerateUniform(rng, y_diff+seqLength*(numLayers-1)*numElements, seqLength * numElements));
-   
-    init_helper(c_diff, 0, numLayers * numElements );
-    init_helper(loss, 0, numElements * seqLength);
+    // init_helper(c_diff, 0, numLayers * numElements );
+    // init_helper(loss, 0, numElements * seqLength);
     cudaErrCheck(cudaDeviceSynchronize());
   }
 
@@ -1363,10 +1394,10 @@ float LSTMTest(int hiddenSize, int miniBatch, int seqLength, int numLayers, int 
   float loss; 
   float elapsedTime;  
 
-  cudaEvent_t global_start, global_end;
+  // cudaEvent_t global_start, global_end;
   // , run_start, run_end;
-  cudaErrCheck(cudaEventCreate(&global_start));
-  cudaErrCheck(cudaEventCreate(&global_end));
+  // cudaErrCheck(cudaEventCreate(&global_start));
+  // cudaErrCheck(cudaEventCreate(&global_end));
   // cudaErrCheck(cudaEventCreate(&run_start));
   // cudaErrCheck(cudaEventCreate(&run_end));
   // cudaErrCheck(cudaEventDestroy(run_start));
@@ -1379,7 +1410,7 @@ float LSTMTest(int hiddenSize, int miniBatch, int seqLength, int numLayers, int 
 
   scheduler.init();
   printf("Initialize success\n");
-  cudaErrCheck(cudaEventRecord(global_start));
+  // cudaErrCheck(cudaEventRecord(global_start));
 
 
   
@@ -1407,10 +1438,6 @@ float LSTMTest(int hiddenSize, int miniBatch, int seqLength, int numLayers, int 
     }
 
     // scheduler.printWeight();
-
-    // // Timing starts here
-    
-   
   }
 
   // scheduler.Forward(&loss);
@@ -1422,8 +1449,8 @@ float LSTMTest(int hiddenSize, int miniBatch, int seqLength, int numLayers, int 
   //   scheduler.printChecksum();
   // }
   
-  cudaErrCheck(cudaEventRecord(global_end));
-  cudaErrCheck(cudaEventSynchronize(global_end));
+  // cudaErrCheck(cudaEventRecord(global_end));
+  // cudaErrCheck(cudaEventSynchronize(global_end));
   
   
   
@@ -1433,14 +1460,14 @@ float LSTMTest(int hiddenSize, int miniBatch, int seqLength, int numLayers, int 
   // printf("Running time used %f ms, avg %f\n", elapsedTime, elapsedTime/10);
 
 
-  cudaErrCheck(cudaEventElapsedTime(&elapsedTime, global_start, global_end));
-  printf("Total time used %f ms\n", elapsedTime);
+  // cudaErrCheck(cudaEventElapsedTime(&elapsedTime, global_start, global_end));
+  // printf("Total time used %f ms\n", elapsedTime);
 
 
   scheduler.freeMemory();
 
-  cudaErrCheck(cudaEventDestroy(global_start));
-  cudaErrCheck(cudaEventDestroy(global_end));
+  // cudaErrCheck(cudaEventDestroy(global_start));
+  // cudaErrCheck(cudaEventDestroy(global_end));
   // cudaErrCheck(cudaEventElapsedTime(&elapsedTime, global_start, run_start));
   // printf("Initialize time used %f ms\n", elapsedTime);
 
@@ -1528,10 +1555,10 @@ int main(int argc, char* argv[]) {
   }
   else if (argc == 1) {
     printf("Running with default settings\n");
-    inputSize = 512;
-    seqLength = 100;
+    inputSize = 32;
+    seqLength = 20;
     numLayers = 4;
-    hiddenSize = 512;
+    hiddenSize = 32;
     miniBatch = 64;
   }
   else {
