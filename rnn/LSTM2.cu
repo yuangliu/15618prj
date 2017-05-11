@@ -73,8 +73,8 @@
 #define DEHFUNC de_tanhf
 #define GFUNC tanhf
 #define DEGFUNC de_tanhf
-#define LOSSFUNC entropye
-#define DELOSSFUNC de_entropye
+#define LOSSFUNC squaree
+#define DELOSSFUNC de_squaree
 
 // Define some error checking macros.
 #define cudaErrCheck(stat) { cudaErrCheck_((stat), __FILE__, __LINE__); }
@@ -535,24 +535,27 @@ struct LSTM_scheduler
       cudaErrCheck(cudaMemcpy(mask, mask_, numElements * seqLength * sizeof(float), cudaMemcpyHostToDevice)); 
   }
 
-  void set_weight(float * T_f_, float * bias_, float * peeps_) {
-    if (T_f_ != NULL) {
-      cudaErrCheck(cudaMemcpy(T_f, T_f_, weightSize * sizeof(float), cudaMemcpyHostToDevice)); 
+  void set_weight(float T_f_=0.1, float bias_=0.1, float peeps_=0.1, int random=0) {
+    if (!(random & 1)) {
+      init_helper(T_f, T_f_, weightSize);
+      //cudaErrCheck(cudaMemcpy(T_f, T_f_, weightSize * sizeof(float), cudaMemcpyHostToDevice)); 
     }
     else {
       curandErrCheck(curandGenerateUniform(rng, T_f, weightSize));
     }
     
-    if (bias_ != NULL) {
-      cudaErrCheck(cudaMemcpy(bias, bias_, hiddenSize * 4 * numLayers * sizeof(float), cudaMemcpyHostToDevice)); 
+    if (!(random & 2)) {
+      init_helper(bias, bias_, hiddenSize * 4 * numLayers);
+      //cudaErrCheck(cudaMemcpy(bias, bias_, hiddenSize * 4 * numLayers * sizeof(float), cudaMemcpyHostToDevice)); 
     }
     else {
       curandErrCheck(curandGenerateUniform(rng, bias, hiddenSize * 4 * numLayers));
     }
 
     #ifdef PEEPHOLES
-    if (peeps_!= NULL) {
-      cudaErrCheck(cudaMemcpy(peeps, peeps_, hiddenSize * 3 * numLayers * sizeof(float), cudaMemcpyHostToDevice)); 
+    if (!(random & 4)) {
+      init_helper(peeps, peeps_, hiddenSize * 3 * numLayers);
+      //cudaErrCheck(cudaMemcpy(peeps, peeps_, hiddenSize * 3 * numLayers * sizeof(float), cudaMemcpyHostToDevice)); 
     }
     else {
       curandErrCheck(curandGenerateUniform(rng, bias, hiddenSize * 4 * numLayers));
@@ -637,7 +640,7 @@ struct LSTM_scheduler
 
     #ifdef PEEPHOLES
       cudaErrCheck(cudaMalloc((void**)&peeps, numLayers * hiddenSize * 3 * sizeof(float)));
-      init_helper(peeps, 0.1, numLayers * hiddenSize * 3);
+      //init_helper(peeps, 0.1, numLayers * hiddenSize * 3);
       // curandErrCheck(curandGenerateUniform(rng, peeps, numLayers * hiddenSize * 3));
     #endif
 
@@ -676,12 +679,12 @@ struct LSTM_scheduler
     init_helper(i_data, 0.2, seqLength * (inputNumElements + numLayers  * numElements));
     // curandErrCheck(curandGenerateUniform(rng, T_f, inputSize * hiddenSize * 4 + hiddenSize * hiddenSize * 4+ (numLayers - 1) * hiddenSize * hiddenSize * 8));
     // cudaErrCheck(cudaMemset(T_f, 0.1, inputSize * hiddenSize * 4 + hiddenSize * hiddenSize * 4+ (numLayers - 1) * hiddenSize * hiddenSize * 8  * sizeof(float)));
-    init_helper(T_f, 0.1, weightSize );
+    //init_helper(T_f, 0.1, weightSize );
 
     // curandErrCheck(curandGenerateUniform(rng, bias, numLayers * hiddenSize * 4));
-    init_helper(bias, 0.1, numLayers * hiddenSize * 4);
+    //init_helper(bias, 0.1, numLayers * hiddenSize * 4);
 
-
+    set_weight(0.1,0.1,0.1,0);
 
     
       
@@ -1452,7 +1455,7 @@ float LSTMTest(int hiddenSize, int miniBatch, int seqLength, int numLayers, int 
 
     if (TRAINING) {
       // scheduler.clearStates();
-      elapsedTime = scheduler.Backward(0.01);
+      elapsedTime = scheduler.Backward(0.2);
       printf("Backward time is %f\n", elapsedTime);
     }
 
