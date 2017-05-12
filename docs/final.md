@@ -167,6 +167,7 @@ We did experiments on GHC machines with NVIDIA GeForce GTX 1080 GPU. We used thr
 | Mini-batch size | 10 | 64 | 64 |
 | Input size | 10 | 32 | 512 |
 | Peephole | Y | Y | Y |
+
 **Table 1:** *LSTM network settings*
 
 ### Optimization breakdown
@@ -178,6 +179,7 @@ We did experiments on GHC machines with NVIDIA GeForce GTX 1080 GPU. We used thr
 |Streaming|76.7 |2.07x|
 |Batched Gradient|107.8|1.47x|
 |Altogether|47.7|3.96x|
+
 **Table 2:** *Optimization speedup against the baseline code*
 
 Table 2. shows the speedup of optimizations by comparing the average back-propagation runtime with the baseline implementation experimenting on a large LSTM network containing 4 layers, 100 sequences and 512 hidden dimensions. Notice that The baseline code is the implementation without these three optimizations with many optimizations already applied.
