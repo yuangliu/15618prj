@@ -65,12 +65,13 @@ Before we start, here are some parameters used in our program:
 The back-propagation process of each iteration includes a series of point-wise operations:
 
 $$\begin{aligned}
-\delta y_t &= \Delta_t + \mathbf{R}_z^T\delta z_{t+1} + \mathbf{R}_i^T\delta i_{t+1} + \mathbf{R}_f^T\delta f_{t+1} + \mathbf{R}_o^T\delta o_{t+1}\\ \big[ &\delta o_{t}, \delta f_{t}, \delta z_{t},\delta i_{t}\big] \propto \delta y_{t}
+\delta y_t &= \Delta_t + \mathbf{R}_z^T\delta z_{t+1} + \mathbf{R}_i^T\delta i_{t+1} + \mathbf{R}_f^T\delta f_{t+1} + \mathbf{R}_o^T\delta o_{t+1}\\  \mid &\delta i_{t}, \delta f_{t}, \delta z_{t},\delta o_{t}\big] \propto \delta y_{t}
 \end{aligned}$$
 <!-- \quad
 \delta f_{t} \propto \delta y_{t}\quad
 \delta i_{t} \propto \delta y_{t}\quad
 \delta z_{t} \propto \delta y_{t}\\ -->
+
 If the cell is not belonged to a base layer, it needs to calculate the delta of the next layer as
 
 $$\delta x_t = \mathbf{W}_z^T\delta z_{t} + \mathbf{W}_i^T\delta z_{t} + \mathbf{W}_f^T\delta f_{t} + \mathbf{W}_o^T\delta o_{t}$$
@@ -86,7 +87,7 @@ $$\begin{aligned}
 \delta p_{o} &= \sum\nolimits^{T}_{t=0} c_t \circ \delta o_{t}\\
 \end{aligned}$$
 
-As illustrated in the above equations, the back-propagation process has stronger recurrent dependencies since $$\delta y_t$$ is relied on the $$\delta i_{t+1},\delta f_{t+1}, \delta o_{t+1},  \delta z_{t+1}$$ from the previous iteration as well as $$\Delta_t = \delta x_t$$ from the upper layer. Therefore, the propagation of deltas needs to be performed iteration by iteration.
+As illustrated in the above equations, the back-propagation process has stronger recurrent dependencies since $$\delta y_t$$ is relied on the $$\big[\delta i_{t+1},\delta f_{t+1}, \delta o_{t+1}, \delta z_{t+1}\big]$$ from the previous iteration as well as $$\Delta_t = \delta x_t$$ from the upper layer. Therefore, the propagation of deltas needs to be performed iteration by iteration.
 
 
 ##### Optimization 1: Fusing Point-wise Operations
@@ -96,10 +97,10 @@ We also perform peephole gradients calculation here. To avoid false sharing, we 
 
 
 ##### Optimization 2: Combining GEMM Operations
-Originally, $$\mathbf{W}_\star$$ and $$\mathbf{R}_\star$$ together require eight GEMMs to be calculated. By aggregating $$\delta_\star$$ into one matrix $$S$$ with size of $$4\times \text{hiddenSize} \times \text{miniBatch}$$, only two GEMMs (i.e. $$W^TS$$ and $$R^TS$$) are needed.
+Originally, $$\mathbf{W}_\star$$ and $$\mathbf{R}_\star$$ together require eight GEMMs to be calculated. By aggregating $$\delta_\star$$ into one matrix $$\mathbf{S}$$ with size of **4 x hiddenSize x miniBatch**, only two GEMMs (i.e. $$\mathbf{W}_{*}^T\mathbf{S}$$ and $$\mathbf{R}_{*}^T\mathbf{S}$$) are needed.
 
 
-By using the above two optimizations, the delta propagation part for each iteration contains only one point-wise operation and two GEMMs. Pseudo-code for the method follows.
+By using the above two optimizations, the gradient propagation part for each iteration contains only one point-wise operation kernel and two GEMMs. Pseudo-code for the method follows.
 ```c++
 for layer in layers:
   for iteration in iterations:
@@ -112,7 +113,7 @@ perform the weights updates
 
 #### Step 2: Optimizing with Each Layer
 
-##### Optimization 3: Group Weight Updates
+##### Optimization 3: Grouping Weight Updates
 The weight updates are heavy if performed in a accumulated way. Also, it requires extra memory allocation to store the temporary gradient. By grouping the weight updates process, a larger matrix can be used in each iteration and no extra memory is needed. The optimized pseudo-code follows.
 ```c++
 for layer in layers:
@@ -145,7 +146,7 @@ The back-propagation dependencies can be seen from Fig. 2, where the red cells a
 <img src="image06.png" style="background-color:#0;"/>  
 **Figure 2:** *Back-propagation dependencies*
 
-We have created  $$layer$$ asynchronous cuda streams and set the GEMMS and element-wise operations from different layers into asynchronous streams  corresponds to their layer index. Therefore,  horizontal dependencies can be ensured because kernels run sequentially within the same stream. The vertical dependencies are protected by  **cudaStreamWaitEvent** commands.  
+We have created  **numlayer** asynchronous cuda streams and set the GEMMS and element-wise operations from different layers into asynchronous streams  corresponds to their layer index. Therefore,  horizontal dependencies can be ensured because kernels run sequentially within the same stream. The vertical dependencies are protected by  **cudaStreamWaitEvent** commands.  
 
 
 
