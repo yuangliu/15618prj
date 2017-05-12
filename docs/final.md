@@ -67,6 +67,7 @@ The back-propagation process of each iteration includes a series of point-wise o
 $$\begin{aligned}
 \delta y_t &= \Delta_t + \mathbf{R}_z^T\delta z_{t+1} + \mathbf{R}_i^T\delta i_{t+1} + \mathbf{R}_f^T\delta f_{t+1} + \mathbf{R}_o^T\delta o_{t+1}\\  \mid &\delta i_{t}, \delta f_{t}, \delta z_{t},\delta o_{t}\big] \propto \delta y_{t}
 \end{aligned}$$
+
 <!-- \quad
 \delta f_{t} \propto \delta y_{t}\quad
 \delta i_{t} \propto \delta y_{t}\quad
@@ -155,6 +156,7 @@ We have created  **numlayer** asynchronous cuda streams and set the GEMMS and el
 
 
 ## Experiment Results
+<!--How successful were you at achieving your goals? We expect results sections to differ from project to project, but we expect your evaluation to be very thorough (your project evaluation is a great way to demonstrate you understood topics from this course).-->
 
 ### Settings
 We did experiments on GHC machines with NVIDIA GeForce GTX 1080 GPU. We used three sizes of LSTM networks, which are shown below:
@@ -168,11 +170,13 @@ We did experiments on GHC machines with NVIDIA GeForce GTX 1080 GPU. We used thr
 | Input size | 10 | 32 | 512 |
 | Peephole | Y | Y | Y |
 
-**Table 1:** *LSTM network settings*
-
 ### Optimization breakdown
 
-| Optimization | Runtime(ms) | Speedup |
+The following table shows the speedup of optimizations by comparing the average back-propagation runtime with the baseline implementation experimenting on a large LSTM network containing 4 layers, 100 sequences and 512 hidden dimensions. Notice that The baseline code is the implementation without these three optimizations with many optimizations already applied.
+
+The streaming method alone can generate approximately 2x speedup and can provide a total speedup of 3.96x when three of optimizations all applied.
+
+| Optimization | Runtime (ms) | Speedup |
 | :--- | :---: | :---: |
 |Baseline |159.0|1.0x|
 |Combined GEMMs |108.4|1.46x|
@@ -180,28 +184,16 @@ We did experiments on GHC machines with NVIDIA GeForce GTX 1080 GPU. We used thr
 |Batched Gradient|107.8|1.47x|
 |Altogether|47.7|3.96x|
 
-**Table 2:** *Optimization speedup against the baseline code*
-
-Table 2. shows the speedup of optimizations by comparing the average back-propagation runtime with the baseline implementation experimenting on a large LSTM network containing 4 layers, 100 sequences and 512 hidden dimensions. Notice that The baseline code is the implementation without these three optimizations with many optimizations already applied.
-
-The streaming method alone can generate approximately 2x speedup and can provide a total speedup of 3.96x when three of optimizations all applied.
 ### Parameter Tuning
 In our batched gradient propagation, the larger batch size can form a larger matrix as the input in GEMM and therefore can have a  better utilization of the GPU computability and have a lower amortized kernel launch cost.
 
 However, larger batch size will also cause greater interference on the propagation to the next level. So, there exists a tradeoff regarding the choice of batch size.
 
 
+As shown in Fig. 3, we experiment increasing batch size with two LSTM networks with different scale and find out that 2 works best for small network and the increasing batch size will always perform better for the large network setting.
 
 <img src="batch.png" style="background-color:#666;"/>  
-**Figure 3:** *Speedup trend with increasing batch size*
-
-As shown in the Figure 3, we experiment increasing batch size with two LSTM networks with different scale and find out that 2 works best for small network (sequence length = 20, hidden size = 64) and the increasing batch size will always perform better for the large network setting (sequence length = 100, hidden size = 512).  
-<!-- With our experiment, 2 works best for small network and 7 works the best for large network.  -->
-
-
-
-<!--How successful were you at achieving your goals? We expect results sections to differ from project to project, but we expect your evaluation to be very thorough (your project evaluation is a great way to demonstrate you understood topics from this course).-->
-
+**Figure 3:** *Speedup trend with increasing batch size.*
 
 ### Comparison with Sequential Version and TensorFlow
 
