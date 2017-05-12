@@ -125,8 +125,11 @@ for layer in layers:
     perform the weights updates
 ```
 
-##### Optimization 4: Combining GEMMs
-The revised pseudo-code follows.
+##### Optimization 4: Batched Gradient Propagation
+Another observation is that the gradient propagation tasks  where the input gradient is calculated for the next layer are independent with each other given the point-wise operations are finished. By performing batched gradient propagation, a reduced amortized cost can achieve.
+
+Therefore, the gradient propagation tasks  will be delayed until all nodes in the same batch have finished their point-wise operations. The revised pseudo-code follows.
+
 ```c++
 for layer in layers:
   for iteration in iterations:
@@ -141,7 +144,7 @@ for layer in layers:
 #### Step 3: Optimizing with Many Layers
 
 ##### Optimization 5: Streaming
-The back-propagation dependencies can be seen from Fig. 2, where the red cells are independent with each other. Ideally, **numLayer** iterations can run concurrently, meaning that the LSTM networks with more layers have more parallelism to exploit.
+The back-propagation dependencies can be seen from Fig. 2, LSTM nodes lie on the diagonal direction are independent with each other as shown as the red cells. Ideally, **numLayer** iterations can run concurrently, meaning that the LSTM networks with more layers have more parallelism to exploit.
 
 <img src="image06.png" style="background-color:#0;"/>  
 **Figure 2:** *Back-propagation dependencies*
