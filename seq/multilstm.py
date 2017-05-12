@@ -42,15 +42,15 @@ class LstmParam:
         self.x_dim = x_dim
         concat_len = x_dim + mem_cell_ct
         # weight matrices
-        self.wg = np.full((mem_cell_ct, concat_len),0.1) #rand_arr(-0.1, 0.1, mem_cell_ct, concat_len)
-        self.wi = np.full((mem_cell_ct, concat_len),0.1) #rand_arr(-0.1, 0.1, mem_cell_ct, concat_len) 
-        self.wf = np.full((mem_cell_ct, concat_len),0.1) #rand_arr(-0.1, 0.1, mem_cell_ct, concat_len)
-        self.wo = np.full((mem_cell_ct, concat_len),0.1) #rand_arr(-0.1, 0.1, mem_cell_ct, concat_len)
+        self.wg = rand_arr(-0.1, 0.1, mem_cell_ct, concat_len)
+        self.wi = rand_arr(-0.1, 0.1, mem_cell_ct, concat_len) 
+        self.wf = rand_arr(-0.1, 0.1, mem_cell_ct, concat_len)
+        self.wo = rand_arr(-0.1, 0.1, mem_cell_ct, concat_len)
         # bias terms
-        self.bg = np.full((mem_cell_ct),0.1)#rand_arr(-0.1, 0.1, mem_cell_ct) 
-        self.bi = np.full((mem_cell_ct),0.1)#rand_arr(-0.1, 0.1, mem_cell_ct) 
-        self.bf = np.full((mem_cell_ct),0.1)#rand_arr(-0.1, 0.1, mem_cell_ct) 
-        self.bo = np.full((mem_cell_ct),0.1)#rand_arr(-0.1, 0.1, mem_cell_ct) 
+        self.bg = rand_arr(-0.1, 0.1, mem_cell_ct) 
+        self.bi = rand_arr(-0.1, 0.1, mem_cell_ct) 
+        self.bf = rand_arr(-0.1, 0.1, mem_cell_ct) 
+        self.bo = rand_arr(-0.1, 0.1, mem_cell_ct) 
         # diffs (derivative of loss function w.r.t. all parameters)
         self.wg_diff = np.zeros((mem_cell_ct, concat_len)) 
         self.wi_diff = np.zeros((mem_cell_ct, concat_len)) 
@@ -84,9 +84,9 @@ class LstmParam:
 class LstmParamPeephole(LstmParam):
     def __init__(self, mem_cell_ct, x_dim, ):
         LstmParam.__init__(self, mem_cell_ct, x_dim)
-        self.pi = np.full((mem_cell_ct),0.1)#rand_arr(-0.1, 0.1, mem_cell_ct)
-        self.pf = np.full((mem_cell_ct),0.1)#rand_arr(-0.1, 0.1, mem_cell_ct)
-        self.po = np.full((mem_cell_ct),0.1)#rand_arr(-0.1, 0.1, mem_cell_ct)
+        self.pi = rand_arr(-0.1, 0.1, mem_cell_ct)
+        self.pf = rand_arr(-0.1, 0.1, mem_cell_ct)
+        self.po = rand_arr(-0.1, 0.1, mem_cell_ct)
 
         self.pi_diff = np.zeros_like(self.pi) 
         self.pf_diff = np.zeros_like(self.pf) 

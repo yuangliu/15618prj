@@ -5,6 +5,11 @@ sigmoid = "sigmoidf(x)"
 linear = "linearf(x)"
 square = "squaree(x,y)"
 entropy = "entropye(x,y)"
+vanilla = "vanilla"
+nog = "nog"
+nfg = "nfg"
+nig = "nig"
+cifg = "cifg"
 
 class LstmInput():
     def __init__(self, inputSize = 512, seqLength = 100):
@@ -37,40 +42,45 @@ class LstmOutput():
                 self.output[i].append(lst[i] + [0] * (self.size - len(lst[i])))
 
 class LstmConfig():
-    def __init__(self, inputSize = 512, hiddenSize = 512, numLayers = 4, seqLength = 100, miniBatch = 64, Peepholes = False, iterations = 10, learningRate = 0.001, g_func = tanh, de_g_func = None, h_func = tanh, de_h_func = None, loss_func = square, de_loss_func = None):
+    def __init__(self, inputSize = 512, hiddenSize = 512, numLayers = 4, seqLength = 100, miniBatch = 64, iterations = 10, learningRate = 0.001, loss_func = square, de_loss_func = None):
         self.inputSize = inputSize
         self.hiddenSize = hiddenSize
         self.numLayers = numLayers
         self.seqLength = seqLength
         self.miniBatch = miniBatch
-        self.Peepholes = Peepholes
         self.iterations = iterations
         self.learningRate = learningRate
+        self.loss_func = loss_func
+        self.de_loss_func = de_loss_func
+
+class LstmNode():
+    def __init__(self, gates = vanilla, g_func = tanh, de_g_func = None, h_func = tanh, de_h_func = None, Peepholes = False):
+        self.gates = gates
         self.g_func = g_func
         self.de_g_func = de_g_func
         self.h_func = h_func
         self.de_h_func = de_h_func
-        self.loss_func = loss_func
-        self.de_loss_func = de_loss_func
+        self.Peepholes = Peepholes
 
 class LstmNetwork():
-    def __init__(self, config = LstmConfig(), file = "LSTM.cu"):
+    def __init__(self, config = LstmConfig(), node = LstmNode(), file = "LSTM.cu"):
         self.file = open(file, 'w')
         self.config = config
+        self.node = node
 
     def run(self, input, output):
         self.file.write(cudafun.header) 
-        self.file.write('#define GFUNC(x) (%s)\n' % (self.config.g_func))
-        if self.config.de_g_func == None:
-            self.file.write('#define DEGFUNC(x) (de_%s)\n' % (self.config.g_func))
+        self.file.write('#define GFUNC(x) (%s)\n' % (self.node.g_func))
+        if self.node.de_g_func == None:
+            self.file.write('#define DEGFUNC(x) (de_%s)\n' % (self.node.g_func))
         else:
-            self.file.write('#define DEGFUNC(x) (%s)\n' % (self.config.de_g_func))
-        self.file.write('#define HFUNC(x) (%s)\n' % (self.config.h_func))
-        if self.config.de_h_func == None:
-            self.file.write('#define DEHFUNC(x) (de_%s)\n' % (self.config.h_func))
+            self.file.write('#define DEGFUNC(x) (%s)\n' % (self.node.de_g_func))
+        self.file.write('#define HFUNC(x) (%s)\n' % (self.node.h_func))
+        if self.node.de_h_func == None:
+            self.file.write('#define DEHFUNC(x) (de_%s)\n' % (self.node.h_func))
         else:
-            self.file.write('#define DEHFUNC(x) (%s)\n' % (self.config.de_h_func))
-        if self.config.Peepholes:
+            self.file.write('#define DEHFUNC(x) (%s)\n' % (self.node.de_h_func))
+        if self.node.Peepholes:
             self.file.write('#define PEEPHOLES\n')
 
         self.file.write('#define LOSSFUNC(x,y) (%s)\n' % (self.config.loss_func))
@@ -78,6 +88,39 @@ class LstmNetwork():
             self.file.write('#define DELOSSFUNC(x,y) (de_%s)\n' % (self.config.loss_func))
         else:
             self.file.write('#define DELOSSFUNC(x,y) (%s)\n' % (self.config.de_loss_func))
+
+        if self.node.gates == nog:
+            self.file.write(r'''#define GATE_NUM (3)
+#define PEEP_NUM (2)
+#define I_INDEX (0)
+#define F_INDEX (1)
+#define G_INDEX (2)''')
+        elif self.node.gates == nfg:
+            self.file.write(r'''#define GATE_NUM (3)
+#define PEEP_NUM (2)
+#define I_INDEX (0)
+#define G_INDEX (1)
+#define O_INDEX (2)''')
+        elif self.node.gates == nig:
+            self.file.write(r'''#define GATE_NUM (3)
+#define PEEP_NUM (2)
+#define F_INDEX (0)
+#define G_INDEX (1)
+#define O_INDEX (2)''')
+        elif self.node.gates == cifg:
+            self.file.write(r'''#define GATE_NUM (3)
+#define PEEP_NUM (2)
+#define I_INDEX (0)
+#define G_INDEX (1)
+#define O_INDEX (2)
+#define CIFG''')
+        else:
+            self.file.write(r'''#define GATE_NUM (4)
+#define PEEP_NUM (3)
+#define I_INDEX (0)
+#define F_INDEX (1)
+#define G_INDEX (2)
+#define O_INDEX (3)''')
 
         self.file.write(cudafun.common) 
         assert input.size == self.config.inputSize

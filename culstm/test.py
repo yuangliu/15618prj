@@ -1,6 +1,6 @@
 import numpy as np
 
-from culstm import LstmInput, LstmOutput, LstmNetwork, LstmConfig
+from culstm import LstmInput, LstmOutput, LstmNetwork, LstmConfig, LstmNode
 import culstm
 
 def example_0():
@@ -8,8 +8,8 @@ def example_0():
     hiddenSize = 32
     inputSize = 32
     numLayers = 4
-    seqLength = 10
-    miniBatch = 32
+    seqLength = 20
+    miniBatch = 64
     lstm_input = LstmInput(inputSize, seqLength)
     for e in range(miniBatch):
         lstm_input.add([[0.2 for x in range(inputSize)] for x in range(seqLength)])
@@ -17,8 +17,9 @@ def example_0():
     for e in range(miniBatch):
         lstm_output.add([[1 for x in range(1)] for x in range(seqLength)])
 
-    lstm_config = LstmConfig(inputSize, hiddenSize, numLayers, seqLength, miniBatch, Peepholes=False, g_func="(x)", de_g_func="1", loss_func = culstm.square)
-    lstm_net = LstmNetwork(lstm_config)
+    lstm_config = LstmConfig(inputSize, hiddenSize, numLayers, seqLength, miniBatch, loss_func = culstm.square)
+    lstm_node = LstmNode(gates = culstm.vanilla, Peepholes=False)
+    lstm_net = LstmNetwork(lstm_config, lstm_node)
     lstm_net.run(lstm_input, lstm_output)
     lstm_net.clean()
 

@@ -92,8 +92,9 @@ void curandErrCheck_(curandStatus_t stat, const char *file, int line) {
    }
 }
 
-
-
+#define GetOffsetW(x) (GATE_NUM * inputSize * hiddenSize + GATE_NUM * hiddenSize * hiddenSize + (x - 1) * 2 * GATE_NUM * hiddenSize * hiddenSize)
+#define GetOffsetR(x) (GetOffsetW(x) +  GATE_NUM * hiddenSize * hiddenSize)
+// (layer - 1) * 8 * hiddenSize * hiddenSize + 8 * hiddenSize * hiddenSize + 4 * hiddenSize * inputSize// #define GetOffsetR(x)
 // Device functions
 __forceinline__ __device__ float sigmoidf(float in) {
    return 1.f / (1.f + expf(-in));  
@@ -196,17 +197,18 @@ int LSTM_elementwise_unfused( int hiddenSize,
   gridDim.x = (numElements + blockDim.x - 1) / blockDim.x;
 
                
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < GATE_NUM; i++) {
     if (tmp_h != NULL) {
-       pw_vecAdd <<< gridDim, blockDim, 0, stream >>> (tmp_i + i * numElements, tmp_i  + i * numElements, tmp_h  + i * numElements, numElements);
+       pw_vecAdd <<< gridDim, blockDim, 0, stream >>> (tmp_i + i * numElements, tmp_i + i * numElements, 
+        tmp_h  + i * numElements, numElements);
        cudaErrCheck(cudaGetLastError());
     }
 
-    pw_biasAdd <<< gridDim, blockDim, 0, stream >>> (tmp_i + i * numElements, bias + i       * hiddenSize, numElements, hiddenSize);
+    pw_biasAdd <<< gridDim, blockDim, 0, stream >>> (tmp_i + i * numElements, bias + i * hiddenSize, numElements, hiddenSize);
     cudaErrCheck(cudaGetLastError());
     
     if (i == 0) {
-       pw_biasAdd <<< gridDim, blockDim, 0, stream >>> (tmp_i + i * numElements, bias + i       * hiddenSize, numElements, hiddenSize);
+       pw_biasAdd <<< gridDim, blockDim, 0, stream >>> (tmp_i + i * numElements, bias + i * hiddenSize, numElements, hiddenSize);
        cudaErrCheck(cudaGetLastError());
     }
     
@@ -216,19 +218,48 @@ int LSTM_elementwise_unfused( int hiddenSize,
     }
   }
 
-  float *in_gate     = tmp_i + 0 * numElements;//i
-  float *forget_gate = tmp_i + 1 * numElements;//f
-  float *in_gate2    = tmp_i + 2 * numElements;//z
-  float *out_gate    = tmp_i + 3 * numElements;//o   
+  float *in_gate     = tmp_i + 
+  #ifdef I_INDEX
+  I_INDEX * numElements;//i
+  #else
+  NULL;
+  #endif
+
+  float *forget_gate = tmp_i + 
+  #ifdef F_INDEX
+  F_INDEX * numElements;//f
+  #else
+  NULL;
+  #endif
+
+  float *in_gate2    = tmp_i + 
+  #ifdef G_INDEX
+  G_INDEX * numElements;//z
+  #else
+  NULL;
+  #endif
+
+  float *out_gate    = tmp_i + 
+  #ifdef O_INDEX
+  O_INDEX * numElements;//z
+  #else
+  NULL;
+  #endif   
 
 
   if (c_in != NULL) {
-    //i_t += p_i + c_t-1          
-    pw_peepsAdd <<< gridDim, blockDim, 0, stream >>> (in_gate, peeps, c_in, numElements, hiddenSize);
+    //i_t += p_i * c_t-1          
+
+    #ifdef I_INDEX
+    pw_peepsAdd <<< gridDim, blockDim, 0, stream >>> (in_gate, peeps + I_INDEX * hiddenSize, c_in, numElements, hiddenSize);
     cudaErrCheck(cudaGetLastError());
-    //f_t += p_f + c_t-1          
-    pw_peepsAdd <<< gridDim, blockDim, 0, stream >>> (forget_gate, peeps + 1 * hiddenSize, c_in, numElements, hiddenSize);
+    #endif
+    //f_t += p_f * c_t-1          
+    #ifdef F_INDEX
+    pw_peepsAdd <<< gridDim, blockDim, 0, stream >>> (forget_gate, peeps + F_INDEX * hiddenSize, c_in, numElements, hiddenSize);
     cudaErrCheck(cudaGetLastError());
+    #endif
+    
 
   }
 
@@ -312,41 +343,87 @@ __global__ void elementWise_fp(int hiddenSize, int miniBatch,
   if (index >= numElements) return;
 
   int batch = index / hiddenSize;
-  int gateIndex = (index % hiddenSize) + 4 * batch * hiddenSize;   
+  int gateIndex = (index % hiddenSize) + GATE_NUM * batch * hiddenSize;   
 
-  float g[4];
+  float g[GATE_NUM];
 
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < GATE_NUM; i++) {
     g[i] = tmp_i[i * hiddenSize + gateIndex] + (tmp_h == NULL? 0:tmp_h[i * hiddenSize + gateIndex]);
     g[i] += bias[i * hiddenSize + index % hiddenSize];
   }  
 
   #ifdef PEEPHOLES 
-
-    g[0] += peeps[index % hiddenSize] * c_in[index];//pi * c[t-1]
-    g[1] += peeps[hiddenSize + index % hiddenSize] * c_in[index];//pf * c[t-1]
-
+    #ifdef I_INDEX
+      g[I_INDEX] += peeps[I_INDEX * hiddenSize + index % hiddenSize] * c_in[index];//pi * c[t-1]
+    #endif
+    #ifdef F_INDEX
+      g[F_INDEX] += peeps[F_INDEX * hiddenSize + index % hiddenSize] * c_in[index];//pf * c[t-1]
+    #endif
   #endif
 
-  float in_gate     = sigmoidf(g[0]);//i
-  float forget_gate = sigmoidf(g[1]);//f
-  float in_gate2    = GFUNC(g[2]);//z
+  
+  float in_gate = 
+  #ifdef I_INDEX
+    sigmoidf(g[I_INDEX]);//i
+  #else
+    1.f;
+  #endif
+
+  
+  float forget_gate = 
+  #ifdef F_INDEX
+    sigmoidf(g[F_INDEX]);//f
+  #else
+    #ifdef CIFG
+      (1 - in_gate);
+    #else
+      1.f;
+    #endif
+  #endif
+
+  
+  float in_gate2    = 
+  #ifdef G_INDEX
+    GFUNC(g[G_INDEX]);//z
+  #else
+    1.f;
+  #endif
+
 
   float val = (forget_gate * c_in[index]) + (in_gate * in_gate2);//c[t] = z*i+c[t-1]*f
   c_out[index] = val;
 
   #ifdef PEEPHOLES
-    g[3] += peeps[hiddenSize*2 + index % hiddenSize] * c_out[index];//po * c[t]
+    #ifdef O_INDEX
+      g[O_INDEX] += peeps[hiddenSize * (O_INDEX - 1) + index % hiddenSize] * c_out[index];//po * c[t]
+    #endif
   #endif
 
-  float out_gate = sigmoidf(g[3]);//o
+  float out_gate = 
+  #ifdef O_INDEX
+    sigmoidf(g[O_INDEX]);//o
+  #else
+    1.f;
+  #endif
+
 
   // #ifdef TRAINING
   if(training) {
-    stateGates[gateIndex] = in_gate;
-    stateGates[hiddenSize + gateIndex] = forget_gate;
-    stateGates[2*hiddenSize + gateIndex] = in_gate2;
-    stateGates[3*hiddenSize + gateIndex] = out_gate;
+    #ifdef I_INDEX
+    stateGates[I_INDEX * hiddenSize + gateIndex] = in_gate;
+    #endif
+
+    #ifdef F_INDEX
+    stateGates[F_INDEX * hiddenSize + gateIndex] = forget_gate;
+    #endif
+
+    #ifdef G_INDEX
+    stateGates[G_INDEX*hiddenSize + gateIndex] = in_gate2;
+    #endif
+
+    #if O_INDEX
+    stateGates[O_INDEX*hiddenSize + gateIndex] = out_gate;
+    #endif
   }
   // #endif
 
@@ -358,7 +435,7 @@ __global__ void elementWise_fp(int hiddenSize, int miniBatch,
   if (label != NULL) {
     if (mask[index % hiddenSize] == 1) {
 
-      loss[index] = LOSSFUNC(val, label[index]);//pow(val - label[index], 2);
+      loss[index] = LOSSFUNC(val, label[index]);
       if (training)
         y_diff[index] = DELOSSFUNC(val, label[index]);
     } else {
@@ -386,46 +463,116 @@ __global__ void elementWise_bp(int hiddenSize, int miniBatch,
   if (index >= numElements) return;
 
   int batch = index / hiddenSize;
-  int gateIndex = (index % hiddenSize) + 4 * batch * hiddenSize;   
+  int gateIndex = (index % hiddenSize) + GATE_NUM * batch * hiddenSize;   
   
 
-  float in_gate = stateGates[gateIndex];
-  float forget_gate = stateGates[hiddenSize + gateIndex];
-  float in_gate2 = stateGates[2 * hiddenSize + gateIndex];
-  float out_gate = stateGates[3 * hiddenSize + gateIndex];
+  float in_gate = 
+  #ifdef I_INDEX
+    stateGates[I_INDEX * hiddenSize + gateIndex];
+  #else
+    1.f;
+  #endif
+  
+  float forget_gate = 
+  #ifdef F_INDEX
+    stateGates[F_INDEX * hiddenSize + gateIndex];
+  #else    
+    #ifdef CIFG
+    1 - in_gate;
+    #else 
+    1.f;
+    #endif
+  #endif
 
+  float in_gate2 = 
+  #ifdef G_INDEX
+    stateGates[G_INDEX * hiddenSize + gateIndex];
+  #else
+    1.f
+  #endif
+
+  float out_gate = 
+  #ifdef O_INDEX
+    stateGates[O_INDEX * hiddenSize + gateIndex];
+  #else
+    1.f;
+  #endif
+
+  
+  #ifdef O_INDEX
   float out_diff = y_diff[index]*HFUNC(c_out[index])*de_sigmoidf(out_gate); //do
+  #endif
+   
 
 
   float peep_diff = 0;
   if (stateGates_diff_in != NULL) peep_diff += c_diff[index];
-  #ifdef PEEPHOLES
-      peep_diff += peeps[2 * hiddenSize + index % hiddenSize] * out_diff;//po * do
-    if (stateGates_diff_in != NULL) { 
 
-      peep_diff += peeps[ index % hiddenSize] * stateGates_diff_in[gateIndex] + //pi * di[t+1]
-      peeps[ hiddenSize + index % hiddenSize] * stateGates_diff_in[hiddenSize + gateIndex];//pf * df[t+1]
+  #ifdef PEEPHOLES
+
+    #ifdef O_INDEX
+      peep_diff += peeps[(O_INDEX - 1) * hiddenSize + index % hiddenSize] * out_diff;//po * do
+    #endif
+
+
+    if (stateGates_diff_in != NULL) { 
+      #ifdef I_INDEX
+        peep_diff += peeps[I_INDEX * hiddenSize + index % hiddenSize] * stateGates_diff_in[I_INDEX * hiddenSize + gateIndex]; //pi * di[t+1]
+      #endif
+
+      #ifdef F_INDEX
+      peep_diff += peeps[F_INDEX * hiddenSize + index % hiddenSize] * stateGates_diff_in[F_INDEX * hiddenSize + gateIndex];//pf * df[t+1]
+      #endif
     }
   #endif
 
 
   float local_c_diff = y_diff[index]*out_gate*DEHFUNC(HFUNC(c_out[index])) + peep_diff;
-  float forget_diff = local_c_diff * c_in[index] * de_sigmoidf(forget_gate);
-  float in_diff = local_c_diff * in_gate2 * de_sigmoidf(in_gate);
+  
+  
   float in_diff2 = local_c_diff * in_gate * DEGFUNC(in_gate2);
 
-  stateGates_diff_out[gateIndex] = in_diff;
-  stateGates_diff_out[hiddenSize + gateIndex] = forget_diff;
-  stateGates_diff_out[2 * hiddenSize + gateIndex] = in_diff2;
-  stateGates_diff_out[3 * hiddenSize + gateIndex] = out_diff;       
+  #ifdef I_INDEX
+    float in_diff = local_c_diff * 
+    #ifdef CIFG
+    (in_gate2 - c_in[index])
+    #else
+    in_gate2 
+    #endif
+    * de_sigmoidf(in_gate);
+    stateGates_diff_out[I_INDEX * hiddenSize + gateIndex] = in_diff;
+  #endif
+
+  #ifdef F_INDEX
+    float forget_diff = local_c_diff * c_in[index] * de_sigmoidf(forget_gate);
+    stateGates_diff_out[F_INDEX * hiddenSize + gateIndex] = forget_diff;
+  #endif
+
+  #ifdef G_INDEX
+    stateGates_diff_out[G_INDEX * hiddenSize + gateIndex] = in_diff2;
+  #endif
+
+  #ifdef O_INDEX
+    stateGates_diff_out[O_INDEX * hiddenSize + gateIndex] = out_diff;       
+  #endif
 
   #ifdef PEEPHOLES
-    int peepIndex = (index % hiddenSize) + 3 * batch * hiddenSize;
+    int peepIndex = (index % hiddenSize) + PEEP_NUM * batch * hiddenSize;
     if (peeps_update) {
-      peeps_diff[peepIndex] = in_diff * c_in[index];//p_i
-      peeps_diff[hiddenSize + peepIndex] = forget_diff * c_in[index]; //p_f
+
+      #ifdef I_INDEX
+      peeps_diff[I_INDEX * hiddenSize + peepIndex] = in_diff * c_in[index];//p_i
+      #endif 
+
+      #ifdef F_INDEX
+      peeps_diff[F_INDEX * hiddenSize + peepIndex] = forget_diff * c_in[index]; //p_f
+      #endif 
     }
-    peeps_diff[2 * hiddenSize + peepIndex] = out_diff * c_out[index]; //p_o
+
+    #ifdef O_INDEX
+    peeps_diff[(O_INDEX - 1) * hiddenSize + peepIndex] = out_diff * c_out[index]; //p_o
+    #endif 
+
   #endif
 
   c_diff[index] = local_c_diff * forget_gate;
@@ -494,6 +641,9 @@ struct LSTM_scheduler
   cublasOperation_t transa;
   cublasOperation_t transb;
 
+  curandGenerator_t rng;
+    
+
   void init_helper(float * device_ptr, float data, int size) {
     if (size == 0)
       return;
@@ -505,29 +655,48 @@ struct LSTM_scheduler
     cudaErrCheck(cudaMemcpy(device_ptr, host_ptr, size * sizeof(float), cudaMemcpyHostToDevice));
   }
 
+
   void set_input(float * input) {
+
     cudaErrCheck(cudaMemcpy(i_data, input, inputLayerSize * sizeof(float), cudaMemcpyHostToDevice));
   }
 
   void set_label(float * label_) {
+    
     cudaErrCheck(cudaMemcpy(label, label_, numElements * seqLength * sizeof(float), cudaMemcpyHostToDevice));
   }
-  
+
   void set_mask(float * mask_) {
     if (mask_ == NULL) {
       init_helper(mask, 1, 1);
-      init_helper(mask + 1, 0, hiddenSize-1);   
-      
-    }
-    else
+      init_helper(mask + 1, 0, hiddenSize-1);     
+    } else {
       cudaErrCheck(cudaMemcpy(mask, mask_, numElements * seqLength * sizeof(float), cudaMemcpyHostToDevice)); 
+    }
   }
 
-  void set_weight(float * T_f_, float * bias_, float * peeps_) {
-    cudaErrCheck(cudaMemcpy(T_f, T_f_, weightSize * sizeof(float), cudaMemcpyHostToDevice)); 
-    cudaErrCheck(cudaMemcpy(bias, bias_, hiddenSize * 4 * numLayers * sizeof(float), cudaMemcpyHostToDevice)); 
+  void set_weight(float T_f_=0.1, float bias_=0.1, float peeps_=0.1, int random=0) {
+    if (!(random & 1)) {
+      init_helper(T_f, T_f_, weightSize);
+    }
+    else {
+      curandErrCheck(curandGenerateUniform(rng, T_f, weightSize));
+    }
+    
+    if (!(random & 2)) {
+      init_helper(bias, bias_, hiddenSize * GATE_NUM * numLayers);
+    }
+    else {
+      curandErrCheck(curandGenerateUniform(rng, bias, hiddenSize * GATE_NUM * numLayers));
+    }
+
     #ifdef PEEPHOLES
-    cudaErrCheck(cudaMemcpy(peeps, peeps_, hiddenSize * 3 * numLayers * sizeof(float), cudaMemcpyHostToDevice)); 
+    if (!(random & 4)) {
+      init_helper(peeps, peeps_, hiddenSize * 3 * numLayers);
+    }
+    else {
+      curandErrCheck(curandGenerateUniform(rng, bias, hiddenSize * PEEP_NUM * numLayers));
+    }
     #endif 
   }
 
@@ -545,12 +714,17 @@ struct LSTM_scheduler
     
     numElements = hiddenSize * miniBatch;
     inputNumElements = inputSize * miniBatch;
-    inputLayerSize = inputNumElements * seqLength;
 
-    weightSize = inputSize * hiddenSize * 4 + hiddenSize * hiddenSize * 4 + (numLayers - 1) * hiddenSize * hiddenSize * 8;
+    inputLayerSize = inputNumElements * seqLength;
+    weightSize = GetOffsetW(numLayers);
 
 
     cublasErrCheck(cublasCreate(&handle));
+
+    curandErrCheck(curandCreateGenerator(&rng, CURAND_RNG_PSEUDO_DEFAULT));
+    curandErrCheck(curandSetPseudoRandomGeneratorSeed(rng, 1337ull));
+
+
     stream_i = (cudaStream_t*)malloc(numLayers * sizeof(cudaStream_t));
     stream_h = (cudaStream_t*)malloc(numLayers * sizeof(cudaStream_t));
     
@@ -574,12 +748,13 @@ struct LSTM_scheduler
        events_i[i] = (cudaEvent_t*)malloc(seqLength * sizeof(cudaEvent_t));
        events_h[i] = (cudaEvent_t*)malloc(seqLength * sizeof(cudaEvent_t));
     }
+
   }
 
 
   
 
-  void init() {
+  void init(float* mask_ = NULL) {
     
     // cudaErrCheck(cudaMalloc((void**)&h_data, (seqLength + 1) * (inputNumElements + (numLayers - 1) * numElements) * sizeof(float)));
     cudaErrCheck(cudaMalloc((void**)&i_data, (seqLength * inputNumElements + seqLength * numLayers  * numElements) * sizeof(float)));
@@ -587,57 +762,55 @@ struct LSTM_scheduler
 
     
 
-    cudaErrCheck(cudaMalloc((void**)&T, (inputSize * hiddenSize * 4 + hiddenSize * hiddenSize * 4+ (numLayers - 1) * hiddenSize * hiddenSize * 8)  * sizeof(float)));
-    cudaErrCheck(cudaMalloc((void**)&T_f, (inputSize * hiddenSize * 4 + hiddenSize * hiddenSize * 4+ (numLayers - 1) * hiddenSize * hiddenSize * 8) * sizeof(float)));
+    cudaErrCheck(cudaMalloc((void**)&T, (inputSize * hiddenSize * GATE_NUM + hiddenSize * hiddenSize * GATE_NUM + (numLayers - 1) * hiddenSize * hiddenSize * 2 * GATE_NUM)  * sizeof(float)));
+    cudaErrCheck(cudaMalloc((void**)&T_f, (inputSize * hiddenSize * GATE_NUM + hiddenSize * hiddenSize * GATE_NUM + (numLayers - 1) * hiddenSize * hiddenSize * 2 * GATE_NUM) * sizeof(float)));
     
     
-    cudaErrCheck(cudaMalloc((void**)&bias, numLayers * hiddenSize * 4 * sizeof(float)));
+    cudaErrCheck(cudaMalloc((void**)&bias, numLayers * hiddenSize * GATE_NUM * sizeof(float)));
 
     cudaErrCheck(cudaMalloc((void**)&label, numElements * seqLength * sizeof(float)));
     cudaErrCheck(cudaMalloc((void**)&loss, numElements * seqLength * sizeof(float)));
     cudaErrCheck(cudaMalloc((void**)&mask, hiddenSize * sizeof(float)));
 
-    init_helper(mask, 1, 1);
-    init_helper(mask + 1, 0, hiddenSize-1);
-    init_helper(label, 1, numElements * seqLength);
+    set_mask(NULL);
+
     init_helper(loss, 0, numElements * seqLength);
+    init_helper(label, 1, numElements * seqLength);
 
     #ifdef PEEPHOLES
-      cudaErrCheck(cudaMalloc((void**)&peeps, numLayers * hiddenSize * 3 * sizeof(float)));
-      init_helper(peeps, 0.1, numLayers * hiddenSize * 3);
+      cudaErrCheck(cudaMalloc((void**)&peeps, numLayers * hiddenSize * PEEP_NUM * sizeof(float)));
+      init_helper(peeps, 0.1, numLayers * hiddenSize * PEEP_NUM);
       // curandErrCheck(curandGenerateUniform(rng, peeps, numLayers * hiddenSize * 3));
     #endif
 
     // Workspace
-    cudaErrCheck(cudaMalloc((void**)&tmp_h, 4 * numLayers * numElements * sizeof(float)));
-    cudaErrCheck(cudaMalloc((void**)&tmp_i, 4 * seqLength * numElements * sizeof(float)));
+    cudaErrCheck(cudaMalloc((void**)&tmp_h, GATE_NUM * numLayers * numElements * sizeof(float)));
+    cudaErrCheck(cudaMalloc((void**)&tmp_i, GATE_NUM * seqLength * numElements * sizeof(float)));
     
     // // Activations
     if (TRAINING) {
        // cudaErrCheck(cudaMalloc((void**)&linearGates, 4 * seqLength * numLayers * numElements * sizeof(float)));
-      cudaErrCheck(cudaMalloc((void**)&stateGates, 4 * seqLength * numLayers * numElements * sizeof(float)));
-      cudaErrCheck(cudaMalloc((void**)&stateGates_diff, 4 * seqLength * numLayers * numElements * sizeof(float)));
+      cudaErrCheck(cudaMalloc((void**)&stateGates, GATE_NUM * seqLength * numLayers * numElements * sizeof(float)));
+      cudaErrCheck(cudaMalloc((void**)&stateGates_diff, GATE_NUM * seqLength * numLayers * numElements * sizeof(float)));
       cudaErrCheck(cudaMalloc((void**)&y_diff, seqLength * numLayers * numElements * sizeof(float)));
       cudaErrCheck(cudaMalloc((void**)&c_diff, numLayers * numElements * seqLength * sizeof(float)));
       
       
 
       #ifdef PEEPHOLES 
-        cudaErrCheck(cudaMalloc((void**)&peeps_diff, numLayers * numElements * seqLength * 3 * sizeof(float)));
-        init_helper(peeps_diff, 0, numLayers * numElements * seqLength * 3 );
+        cudaErrCheck(cudaMalloc((void**)&peeps_diff, numLayers * numElements * seqLength * PEEP_NUM * sizeof(float)));
+        init_helper(peeps_diff, 0, numLayers * numElements * seqLength * PEEP_NUM);
       #endif
+
       cudaErrCheck(cudaMalloc((void**)&diff_helper, miniBatch * seqLength * sizeof(float)));
 
       init_helper(diff_helper, 1.0, miniBatch * seqLength);
       init_helper(c_diff, 0, numLayers * numElements);
-      init_helper(stateGates_diff, 0, 4 * seqLength * numLayers * numElements);
+      init_helper(stateGates_diff, 0, GATE_NUM * seqLength * numLayers * numElements);
     }
 
     // Initialise with random values.
-    // curandGenerator_t rng;
-    // curandErrCheck(curandCreateGenerator(&rng, CURAND_RNG_PSEUDO_DEFAULT));
-    // curandErrCheck(curandSetPseudoRandomGeneratorSeed(rng, 1337ull));
-    // curandErrCheck(curandGenerateUniform(rng, h_data, (seqLength + 1) * (numLayers) * numElements));
+        // curandErrCheck(curandGenerateUniform(rng, h_data, (seqLength + 1) * (numLayers) * numElements));
     // curandErrCheck(curandGenerateUniform(rng, c_data, (seqLength + 1) * (numLayers) * numElements));
     // cudaErrCheck(cudaMemset(c_data, 0,  (seqLength + 1) * (numLayers) * numElements  * sizeof(float)));
     init_helper(c_data, 0, (seqLength + 1) * (numLayers) * numElements);
@@ -646,22 +819,19 @@ struct LSTM_scheduler
     init_helper(i_data, 0.2, seqLength * (inputNumElements + numLayers  * numElements));
     // curandErrCheck(curandGenerateUniform(rng, T_f, inputSize * hiddenSize * 4 + hiddenSize * hiddenSize * 4+ (numLayers - 1) * hiddenSize * hiddenSize * 8));
     // cudaErrCheck(cudaMemset(T_f, 0.1, inputSize * hiddenSize * 4 + hiddenSize * hiddenSize * 4+ (numLayers - 1) * hiddenSize * hiddenSize * 8  * sizeof(float)));
-    init_helper(T_f, 0.1, weightSize );
-
     // curandErrCheck(curandGenerateUniform(rng, bias, numLayers * hiddenSize * 4));
-    init_helper(bias, 0.1, numLayers * hiddenSize * 4);
 
 
-
+    set_weight(0.1,0.1,0.1,0);
     
       
     
 
-    if (TRAINING) {
-      init_helper(y_diff, 0, seqLength*numLayers*numElements);
-      init_helper(y_diff+seqLength*(numLayers-1)*numElements, 1, seqLength * numElements);
-       // curandErrCheck(curandGenerateUniform(rng, y_diff+seqLength*(numLayers-1)*numElements, seqLength * numElements));
-    }
+    // if (TRAINING) {
+    //   init_helper(y_diff, 0, seqLength*numLayers*numElements);
+    //   init_helper(y_diff+seqLength*(numLayers-1)*numElements, 1, seqLength * numElements);
+    //    // curandErrCheck(curandGenerateUniform(rng, y_diff+seqLength*(numLayers-1)*numElements, seqLength * numElements));
+    // }
 
     // curandErrCheck(curandDestroyGenerator(rng));
 
@@ -688,21 +858,23 @@ struct LSTM_scheduler
     
   }
 
-  void clearStates(float * input=NULL, float * label=NULL) {
-     if(TRAINING) {
-        set_input(input);
-     }
+  void clearStates(float * input=NULL, float * label_=NULL) {
+    if(TRAINING) {
 
-   
+      if(input) {set_input(input);}
+      else {init_helper(i_data, 0.2, seqLength * (inputNumElements + numLayers  * numElements));}
+      if(label) set_label(label);
+      else {init_helper(label, 1, numElements * seqLength);}
+
+    }
       // init_helper(y_diff, 0, seqLength*(numLayers-1)*numElements);
       // init_helper(y_diff+seqLength*(numLayers-1)*numElements, 1, seqLength * numElements);
       // init_helper(peeps_diff, 0, 3 * numElements * numLayers * seqLength);
 
        // curandErrCheck(curandGenerateUniform(rng, y_diff+seqLength*(numLayers-1)*numElements, seqLength * numElements));
-   
-    init_helper(c_diff, 0, numLayers * numElements );
-    init_helper(loss, 0, numElements * seqLength);
-    cudaErrCheck(cudaDeviceSynchronize());
+    // init_helper(c_diff, 0, numLayers * numElements );
+    // init_helper(loss, 0, numElements * seqLength);
+    // cudaErrCheck(cudaDeviceSynchronize());
   }
 
   float Forward(float* sumLoss) {
@@ -783,29 +955,29 @@ struct LSTM_scheduler
           //[4N * N] x [N * 2m] = [4N * 2m] 
             cublasErrCheck(cublasSgemm(handle,
                        transa, transb,
-                       4 * hiddenSize, miniBatch * (rEnd - rStart), layer > 0 ? hiddenSize: inputSize,
+                       GATE_NUM * hiddenSize, miniBatch * (rEnd - rStart), layer > 0 ? hiddenSize: inputSize,
                        &alpha,
-                       layer > 0 ? &T_f[4 * inputSize * hiddenSize + 4 * hiddenSize * hiddenSize + (layer - 1) * 8 * hiddenSize * hiddenSize]:T_f,
-                       transa == CUBLAS_OP_N ? 4 * hiddenSize : hiddenSize,
+                       layer > 0 ? &T_f[GetOffsetW(layer)]:T_f,
+                       transa == CUBLAS_OP_N ? GATE_NUM * hiddenSize : hiddenSize,
                        layer > 0 ? i_data + rStart * numElements + (layer - 1) * seqLength * numElements + seqLength * inputNumElements: i_data + rStart * inputNumElements,
                        layer > 0 ? hiddenSize:inputSize,
                        &beta,
-                       tmp_i + 4 * rStart * numElements,
-                       4 * hiddenSize));
+                       tmp_i + GATE_NUM * rStart * numElements,
+                       GATE_NUM * hiddenSize));
         }
         else {
-          for (int igemm =0; igemm < 4; igemm++) {
+          for (int igemm =0; igemm < GATE_NUM; igemm++) {
             cublasErrCheck(cublasSgemm(handle,
                      transa, transb,
                      hiddenSize, miniBatch * (rEnd - rStart), layer > 0 ? hiddenSize:inputSize,
                      &alpha,
-                     layer > 0 ? &T_f[4 * inputSize * hiddenSize + 4 * hiddenSize * hiddenSize + (layer - 1) * 8 * hiddenSize * hiddenSize + igemm * hiddenSize]:&T_f[igemm * hiddenSize],
-                     transa == CUBLAS_OP_N ? 4 * hiddenSize : hiddenSize,
+                     layer > 0 ? &T_f[GetOffsetW(layer) + igemm * hiddenSize]:&T_f[igemm * hiddenSize],
+                     transa == CUBLAS_OP_N ? GATE_NUM * hiddenSize : hiddenSize,
                      layer > 0 ? i_data + rStart * numElements + (layer - 1) * seqLength * numElements + seqLength * inputNumElements: i_data + rStart * inputNumElements,
                      layer > 0 ? hiddenSize:inputSize,
                      &beta,
-                     tmp_i + 4 * rStart * numElements + igemm * hiddenSize,
-                     4 * hiddenSize)); 
+                     tmp_i + GATE_NUM * rStart * numElements + igemm * hiddenSize,
+                     GATE_NUM * hiddenSize)); 
           }
         }
         
@@ -822,32 +994,32 @@ struct LSTM_scheduler
             if (i > 0) {
               cublasErrCheck(cublasSgemm(handle,
                           transa, transb,
-                          4 * hiddenSize, miniBatch, hiddenSize,
+                          GATE_NUM * hiddenSize, miniBatch, hiddenSize,
                           &alpha,
-                          layer > 0? &T_f[4 * hiddenSize * hiddenSize + 4 * inputSize * hiddenSize + 4 * hiddenSize * hiddenSize + (layer - 1) * 8 * hiddenSize * hiddenSize]:&T_f[4 * inputSize * hiddenSize], 
-                          transa == CUBLAS_OP_N ? 4 * hiddenSize : hiddenSize,
+                          layer > 0? &T_f[GetOffsetR(layer)]:&T_f[GATE_NUM * inputSize * hiddenSize], 
+                          transa == CUBLAS_OP_N ? GATE_NUM * hiddenSize : hiddenSize,
                           // h_data + i * numElements + layer * (seqLength + 1) * numElements,
                           i_data + layer * seqLength * numElements + seqLength * inputNumElements + (i - 1) * numElements,
                           hiddenSize,
                           &beta,
-                          tmp_h + 4 * layer * numElements, 
-                          4 * hiddenSize));
+                          tmp_h + GATE_NUM * layer * numElements, 
+                          GATE_NUM * hiddenSize));
             }
           }
           else {
             if (i > 0) {
-              for (int igemm =0; igemm < 4; igemm++) {
+              for (int igemm =0; igemm < GATE_NUM; igemm++) {
                 cublasErrCheck(cublasSgemm(handle,
                            transa, transb,
                            hiddenSize, miniBatch, hiddenSize,
                            &alpha,
-                           layer > 0? &T_f[4 * hiddenSize * hiddenSize + 4 * inputSize * hiddenSize + 4 * hiddenSize * hiddenSize + (layer - 1) * 8 * hiddenSize * hiddenSize + igemm * hiddenSize]:&T_f[4 * inputSize * hiddenSize + igemm * hiddenSize], 
-                           transa == CUBLAS_OP_N ? 4 * hiddenSize : hiddenSize,
+                           layer > 0? &T_f[GetOffsetR(layer) + igemm * hiddenSize]:&T_f[GATE_NUM * inputSize * hiddenSize + igemm * hiddenSize], 
+                           transa == CUBLAS_OP_N ? GATE_NUM * hiddenSize : hiddenSize,
                            i_data + layer * seqLength * numElements + seqLength * inputNumElements + (i - 1) * numElements,
                            hiddenSize,
                            &beta,
-                           tmp_h + 4 * layer * numElements + igemm * hiddenSize, 
-                           4 * hiddenSize));
+                           tmp_h + GATE_NUM * layer * numElements + igemm * hiddenSize, 
+                           GATE_NUM * hiddenSize));
               }
             }
           }
@@ -865,16 +1037,16 @@ struct LSTM_scheduler
             
             elementWise_fp <<< gridDim, blockDim , 0, stream_h[layer] >>> 
                    (hiddenSize, miniBatch,
-                    i > 0 ? tmp_h + 4 * layer * numElements:NULL, 
-                    tmp_i + 4 * i * numElements, 
-                    bias + 4 * layer * hiddenSize,
+                    i > 0 ? tmp_h + GATE_NUM * layer * numElements:NULL, 
+                    tmp_i + GATE_NUM * i * numElements, 
+                    bias + GATE_NUM * layer * hiddenSize,
                     #ifdef PEEPHOLES 
-                      peeps + 3 * layer * hiddenSize,
+                      peeps + PEEP_NUM * layer * hiddenSize,
                     #else
                       NULL,
                     #endif
                     // TRAINING ? linearGates + 4 * (i * numElements + layer * seqLength * numElements) : NULL,
-                    TRAINING ? stateGates + 4 * (i * numElements + layer * seqLength * numElements) : NULL,
+                    TRAINING ? stateGates + GATE_NUM * (i * numElements + layer * seqLength * numElements) : NULL,
                     // h_data + (i + 1) * numElements + layer * (seqLength + 1) * numElements,
                     i_data + i * numElements + layer  * seqLength * numElements + seqLength * inputNumElements,
                     c_data + i * numElements + layer * (seqLength + 1) * numElements,
@@ -889,11 +1061,11 @@ struct LSTM_scheduler
           }
           else {
             LSTM_elementwise_unfused(hiddenSize, miniBatch,
-                    i > 0 ? tmp_h + 4 * layer * numElements:NULL, 
-                    tmp_i + 4 * i * numElements, 
-                    bias + 4 * layer * hiddenSize,
+                    i > 0 ? tmp_h + GATE_NUM * layer * numElements:NULL, 
+                    tmp_i + GATE_NUM * i * numElements, 
+                    bias + GATE_NUM * layer * hiddenSize,
                     #ifdef PEEPHOLES  
-                      peeps + 3 * layer * hiddenSize,
+                      peeps + PEEP_NUM * layer * hiddenSize,
                     #else
                       NULL,
                     #endif
@@ -1003,10 +1175,10 @@ struct LSTM_scheduler
           // printf("level %d row %d\n", layer, i);
           cublasErrCheck(cublasSetStream(handle, stream_h[layer]));
           //wait for the upper layer
-          if (layer < numLayers-1) {
-            cudaErrCheck(cudaStreamWaitEvent(stream_h[layer], events_h[layer + 1][i], 0));
-            cudaErrCheck(cudaEventDestroy(events_h[layer + 1][i]));
-          }
+          // if (layer < numLayers-1) {
+          //   cudaErrCheck(cudaStreamWaitEvent(stream_h[layer], events_h[layer + 1][i], 0));
+          //   cudaErrCheck(cudaEventDestroy(events_h[layer + 1][i]));
+          // }
           //pointwise operations get diff
           // cudaErrCheck(cudaDeviceSynchronize());
           dim3 blockDim;
@@ -1018,12 +1190,12 @@ struct LSTM_scheduler
           elementWise_bp <<< gridDim, blockDim , 0, stream_h[layer] >>> 
               (hiddenSize, miniBatch,
               y_diff + i * numElements + layer * numElements * seqLength, 
-              (i == seqLength - 1) ? NULL : stateGates_diff + 4 * ((i + 1) * numElements + layer * seqLength * numElements), 
-              stateGates_diff + 4 * (i * numElements + layer * seqLength * numElements), 
-              stateGates + 4 * (i * numElements + layer * seqLength  * numElements),
+              (i == seqLength - 1) ? NULL : stateGates_diff + GATE_NUM * ((i + 1) * numElements + layer * seqLength * numElements), 
+              stateGates_diff + GATE_NUM * (i * numElements + layer * seqLength * numElements), 
+              stateGates + GATE_NUM * (i * numElements + layer * seqLength  * numElements),
               #ifdef PEEPHOLES
-                peeps + 3 * layer * hiddenSize,
-                peeps_diff + 3 * (i * numElements + layer * seqLength * numElements),
+                peeps + PEEP_NUM * layer * hiddenSize,
+                peeps_diff + PEEP_NUM * (i * numElements + layer * seqLength * numElements),
               #else
                 NULL,
                 NULL,
@@ -1042,6 +1214,11 @@ struct LSTM_scheduler
             cudaErrCheck(cudaEventRecord(events_i[layer][i], stream_h[layer])); 
           }
 
+          if(layer > 0) {
+              cudaErrCheck(cudaEventCreate(&events_h[layer][i], cudaEventDisableTiming));
+              cudaErrCheck(cudaEventRecord(events_h[layer][i], stream_h[layer])); 
+          }
+
           if (i > 0) {
             //RT * diff = dy
             float alpha = 1.f;
@@ -1050,34 +1227,35 @@ struct LSTM_scheduler
             if (GROUP_GEMM) {
               cublasErrCheck(cublasSgemm(handle,
                     CUBLAS_OP_T, transb,
-                    hiddenSize, miniBatch, 4 * hiddenSize,
+                    hiddenSize, miniBatch, GATE_NUM * hiddenSize,
                     &alpha,
-                    layer > 0 ? &T_f[(layer - 1) * 8 * hiddenSize * hiddenSize + 8 * hiddenSize * hiddenSize + 4 * hiddenSize * inputSize]:&T_f[4 * hiddenSize * inputSize], 
-                    4 * hiddenSize,
-                    stateGates_diff + 4 * (i * numElements + layer * seqLength  * numElements),
-                    4 * hiddenSize,
+                    layer > 0 ? &T_f[GetOffsetR(layer)]:&T_f[GATE_NUM * hiddenSize * inputSize], 
+                    GATE_NUM * hiddenSize,
+                    stateGates_diff + GATE_NUM * (i * numElements + layer * seqLength  * numElements),
+                    GATE_NUM * hiddenSize,
                     &beta,
                     y_diff + layer * numElements * seqLength + (i - 1) * numElements, 
                     hiddenSize));
             }
             else {
-              for (int igemm = 0; igemm < 4; igemm++) {
+              for (int igemm = 0; igemm < GATE_NUM; igemm++) {
                 
                   cublasErrCheck(cublasSgemm(handle,
                     CUBLAS_OP_T, transb,
                     hiddenSize, miniBatch, hiddenSize,
                     &alpha,
-                    layer > 0 ? &T_f[(layer - 1) * 8 * hiddenSize * hiddenSize + 8 * hiddenSize * hiddenSize + 4 * hiddenSize * inputSize + igemm * hiddenSize]:&T_f[4 * hiddenSize * inputSize + igemm * hiddenSize], 
-                    4 * hiddenSize,
-                    stateGates_diff + 4 * (i * numElements + layer * seqLength * numElements) + igemm * hiddenSize,
-                    4 * hiddenSize,
+                    layer > 0 ? &T_f[GetOffsetR(layer) + igemm * hiddenSize]:&T_f[GATE_NUM * hiddenSize * inputSize + igemm * hiddenSize], 
+                    GATE_NUM * hiddenSize,
+                    stateGates_diff + GATE_NUM * (i * numElements + layer * seqLength * numElements) + igemm * hiddenSize,
+                    GATE_NUM * hiddenSize,
                     &beta,
                     y_diff + layer * numElements * seqLength + (i - 1) * numElements, 
                     hiddenSize));
                 }
               }
             }
-          
+            
+        
         }
           // transa = (PRE_TRANSPOSE && (seqLength > 1)) ? CUBLAS_OP_N : CUBLAS_OP_T;
 
@@ -1085,32 +1263,42 @@ struct LSTM_scheduler
         int row = rev_rEnd+1;
 
         if (layer > 0) {
+
+          
+
+          cublasErrCheck(cublasSetStream(handle, stream_h[layer - 1]));
+
+          for (int i = rev_rStart; i > rev_rEnd; i--) {
+            cudaErrCheck(cudaStreamWaitEvent(stream_h[layer-1], events_h[layer][i], 0));
+            cudaErrCheck(cudaEventDestroy(events_h[layer][i]));
+          }
+
           float alpha = 1.f;
           float beta = 0.f; 
 
           if (GROUP_GEMM) {
             cublasErrCheck(cublasSgemm(handle,
                       CUBLAS_OP_T, transb,
-                      hiddenSize, miniBatch*(rev_rStart - rev_rEnd), 4 * hiddenSize,
+                      hiddenSize, miniBatch*(rev_rStart - rev_rEnd), GATE_NUM * hiddenSize,
                       &alpha,
-                      &T_f[4 * hiddenSize * inputSize + 4 * hiddenSize * hiddenSize + (layer - 1) * 8 * hiddenSize * hiddenSize], 
-                      4 * hiddenSize,
-                      stateGates_diff + 4 * (row * numElements + layer * seqLength  * numElements),
-                      4 * hiddenSize,
+                      &T_f[GetOffsetW(layer)], 
+                      GATE_NUM * hiddenSize,
+                      stateGates_diff + GATE_NUM * (row * numElements + layer * seqLength  * numElements),
+                      GATE_NUM * hiddenSize,
                       &beta,
                       y_diff + (layer - 1) * numElements * seqLength + row * numElements, 
                       hiddenSize));
           }
           else {
-            for (int igemm = 0; igemm < 4; igemm++) {
+            for (int igemm = 0; igemm < GATE_NUM; igemm++) {
               cublasErrCheck(cublasSgemm(handle,
                       CUBLAS_OP_T, transb,
                       hiddenSize, miniBatch*(rev_rStart - rev_rEnd), hiddenSize,
                       &alpha,
-                      &T_f[4 * hiddenSize * inputSize + 4 * hiddenSize * hiddenSize + (layer - 1) * 8 * hiddenSize * hiddenSize + igemm * hiddenSize], 
-                      4 * hiddenSize,
-                      stateGates_diff + 4 * (row * numElements + layer * seqLength  * numElements) + igemm * hiddenSize,
-                      4 * hiddenSize,
+                      &T_f[GetOffsetW(layer) + igemm * hiddenSize], 
+                      GATE_NUM * hiddenSize,
+                      stateGates_diff + GATE_NUM * (row * numElements + layer * seqLength  * numElements) + igemm * hiddenSize,
+                      GATE_NUM * hiddenSize,
                       &beta,
                       y_diff + (layer - 1) * numElements * seqLength + row * numElements, 
                       hiddenSize));
@@ -1119,76 +1307,72 @@ struct LSTM_scheduler
           }
         }
 
-        if(layer != 0) {
-          for (int i = rev_rStart; i > rev_rEnd; i--) {
-            cudaErrCheck(cudaEventCreate(&events_h[layer][i], cudaEventDisableTiming));
-            cudaErrCheck(cudaEventRecord(events_h[layer][i], stream_h[layer])); 
-          }
-        } 
+         
 
         if (row == 0) {
-                
+            cublasErrCheck(cublasSetStream(handle, stream_h[layer]));
             float lr = -learningRate;
 
             float beta = 1.f;
             //update W
             cublasErrCheck(cublasSgemm(handle,
                         CUBLAS_OP_N, CUBLAS_OP_T,
-                        4 * hiddenSize, layer > 0 ? hiddenSize : inputSize, miniBatch * seqLength,
+                        GATE_NUM * hiddenSize, layer > 0 ? hiddenSize : inputSize, miniBatch * seqLength,
                         &lr,
-                        stateGates_diff + 4 * layer * seqLength * numElements, 
-                        4 * hiddenSize,
+                        stateGates_diff + GATE_NUM * layer * seqLength * numElements, 
+                        GATE_NUM * hiddenSize,
                         layer > 0 ? i_data + (layer - 1) * seqLength * numElements + seqLength * inputNumElements : i_data,
                         layer > 0 ? hiddenSize : inputSize,
                         &beta,
-                        layer > 0 ? &T_f[4 * hiddenSize * inputSize + 4 * hiddenSize * hiddenSize + (layer - 1) * 8 * hiddenSize * hiddenSize]:&T_f[0], 
-                        4 * hiddenSize));
+                        layer > 0 ? &T_f[GetOffsetW(layer)]:&T_f[0], 
+                        GATE_NUM * hiddenSize));
 
 
             cudaErrCheck(cudaStreamWaitEvent(stream_i[layer], events_i[layer][1], 0));
             cudaErrCheck(cudaEventDestroy(events_i[layer][1]));
 
             cublasErrCheck(cublasSetStream(handle, stream_i[layer]));
+
             //update R
             cublasErrCheck(cublasSgemm(handle,
                         CUBLAS_OP_N, CUBLAS_OP_T,
-                        4 * hiddenSize, hiddenSize, miniBatch * (seqLength - 1),
+                        GATE_NUM * hiddenSize, hiddenSize, miniBatch * (seqLength - 1),
                         &lr,
-                        stateGates_diff + 4 *  (layer * seqLength  * numElements + numElements), 
-                        4 * hiddenSize,
+                        stateGates_diff + GATE_NUM *  (layer * seqLength  * numElements + numElements), 
+                        GATE_NUM * hiddenSize,
                         i_data + layer * seqLength * numElements + seqLength * inputNumElements,
                         hiddenSize,
                         &beta,
-                        layer > 0 ? &T_f[(layer - 1) * 8 * hiddenSize * hiddenSize + 8 * hiddenSize * hiddenSize + 4 * hiddenSize * inputSize]:&T_f[4 * hiddenSize * inputSize], 
-                        4 * hiddenSize));
+                        layer > 0 ? &T_f[GetOffsetR(layer)]:&T_f[GATE_NUM * hiddenSize * inputSize], 
+                        GATE_NUM * hiddenSize));
 
             cublasErrCheck(cublasSetStream(handle, stream_h[layer]));
 
             //update bias
             cublasErrCheck(cublasSgemv(handle,
                         CUBLAS_OP_N, 
-                        4 * hiddenSize, miniBatch * seqLength, 
+                        GATE_NUM * hiddenSize, miniBatch * seqLength, 
                         &lr,
-                        stateGates_diff + 4 *  (layer * seqLength  * numElements), 
-                        4 * hiddenSize,
+                        stateGates_diff + GATE_NUM *  (layer * seqLength  * numElements), 
+                        GATE_NUM * hiddenSize,
                         diff_helper,
                         1,
                         &beta,
-                        &bias[layer * hiddenSize * 4], 
+                        &bias[layer * hiddenSize * GATE_NUM], 
                         1));
 
             #ifdef PEEPHOLES
               //update peeps
             cublasErrCheck(cublasSgemv(handle,
                         CUBLAS_OP_N, 
-                        3 * hiddenSize, miniBatch * seqLength, 
+                        PEEP_NUM * hiddenSize, miniBatch * seqLength, 
                         &lr,
-                        peeps_diff + 3 *  (layer  * numElements * seqLength), 
-                        3 * hiddenSize,
+                        peeps_diff + PEEP_NUM *  (layer  * numElements * seqLength), 
+                        PEEP_NUM * hiddenSize,
                         diff_helper,
                         1,
                         &beta,
-                        &peeps[layer * hiddenSize * 3], 
+                        &peeps[layer * hiddenSize * PEEP_NUM], 
                         1));
             #endif
             
@@ -1257,9 +1441,9 @@ struct LSTM_scheduler
   }
 
   void printWeight() {
-    int t_size = (4 * inputSize * hiddenSize + 4 * hiddenSize * hiddenSize);
-    int bias_size = 4 * hiddenSize * numLayers;
-    int stats_size = 4 * numElements * seqLength;
+    int t_size = (GATE_NUM * inputSize * hiddenSize + GATE_NUM * hiddenSize * hiddenSize);
+    int bias_size = GATE_NUM * hiddenSize * numLayers;
+    int stats_size = GATE_NUM * numElements * seqLength;
     int c_diff_size = numLayers * numElements;
     
 
@@ -1269,8 +1453,8 @@ struct LSTM_scheduler
 
     t_output = (float*)malloc( t_size * sizeof(float));
     bias_output = (float*)malloc(bias_size * sizeof(float));
-    states_output = (float*)malloc(8 * sizeof(float));
-    y_output = (float*)malloc(2 * sizeof(float));
+    states_output = (float*)malloc(4 * GATE_NUM * sizeof(float));
+    y_output = (float*)malloc(seqLength * sizeof(float));
     c_diff_output = (float*)malloc(c_diff_size * sizeof(float));
 
     cudaErrCheck(cudaMemcpy(t_output, T_f, t_size * sizeof(float),cudaMemcpyDeviceToHost));  
@@ -1292,7 +1476,7 @@ struct LSTM_scheduler
 
     #ifdef PEEPHOLES
       float * peeps_output;
-      int peeps_size = 3 * numElements * numLayers * seqLength;
+      int peeps_size = PEEP_NUM * numElements * numLayers * seqLength;
       peeps_output = (float*)malloc(peeps_size * sizeof(float));
       cudaErrCheck(cudaMemcpy(peeps_output,peeps_diff, peeps_size * sizeof(float),cudaMemcpyDeviceToHost)); 
       printf("peeps:\t"); 
@@ -1316,6 +1500,7 @@ struct LSTM_scheduler
       printf("%f\t",c_diff_output[i]);
     }
     printf("\n");
+    curandErrCheck(curandDestroyGenerator(rng));
 
   }
 
@@ -1375,54 +1560,51 @@ struct LSTM_scheduler
    
 };
 
-
 float LSTMTest(int hiddenSize, int miniBatch, int seqLength, int numLayers, int inputSize, bool checkF) {
 
   float loss; 
   float elapsedTime;  
 
-  cudaEvent_t global_start, global_end;
-  // , run_start, run_end;
+  cudaEvent_t global_start, global_end, run_start, run_end;
   cudaErrCheck(cudaEventCreate(&global_start));
   cudaErrCheck(cudaEventCreate(&global_end));
-  // cudaErrCheck(cudaEventCreate(&run_start));
-  // cudaErrCheck(cudaEventCreate(&run_end));
+  cudaErrCheck(cudaEventCreate(&run_start));
+  cudaErrCheck(cudaEventCreate(&run_end));
   // cudaErrCheck(cudaEventDestroy(run_start));
   // cudaErrCheck(cudaEventDestroy(run_end));
 
-
+  cudaErrCheck(cudaEventRecord(global_start));
 
   LSTM_scheduler scheduler(hiddenSize,miniBatch,seqLength,numLayers,inputSize);
 
 
   scheduler.init();
   printf("Initialize success\n");
-  cudaErrCheck(cudaEventRecord(global_start));
+  
 
 
   
 
-  // cudaErrCheck(cudaEventRecord(run_start));
+  cudaErrCheck(cudaEventRecord(run_start));
   // cudaErrCheck(cudaEventSynchronize(run_start));
   
   // scheduler.Forward(&loss);
   // printf("Forward loss is %f\n", loss);
 
 
-  // if (checkF) {
-  //   scheduler.printChecksum();
-  // }
 '''
 scheduler_2 = r'''
   // scheduler.Forward(&loss);
   // printf("Forward loss is %f\n", loss);
 
-  // cudaErrCheck(cudaEventRecord(run_end));
+  cudaErrCheck(cudaEventRecord(run_end));
   // We're done. Print some checksums
   // if (checkF) {
   //   scheduler.printChecksum();
   // }
-  
+  scheduler.freeMemory();
+  cudaErrCheck(cudaDeviceSynchronize());
+
   cudaErrCheck(cudaEventRecord(global_end));
   cudaErrCheck(cudaEventSynchronize(global_end));
   
@@ -1430,83 +1612,27 @@ scheduler_2 = r'''
   
   
   
-  // cudaErrCheck(cudaEventElapsedTime(&elapsedTime, run_start, run_end));
-  // printf("Running time used %f ms, avg %f\n", elapsedTime, elapsedTime/10);
+  cudaErrCheck(cudaEventElapsedTime(&elapsedTime, run_start, run_end));
+  printf("Running time used %f ms, avg %f\n", elapsedTime, elapsedTime/10);
 
 
   cudaErrCheck(cudaEventElapsedTime(&elapsedTime, global_start, global_end));
   printf("Total time used %f ms\n", elapsedTime);
 
 
-  scheduler.freeMemory();
-
-  cudaErrCheck(cudaEventDestroy(global_start));
-  cudaErrCheck(cudaEventDestroy(global_end));
-  // cudaErrCheck(cudaEventElapsedTime(&elapsedTime, global_start, run_start));
-  // printf("Initialize time used %f ms\n", elapsedTime);
-
-  // cudaErrCheck(cudaEventElapsedTime(&elapsedTime, run_end, global_end));
-  // printf("Memory free time used %f ms\n", elapsedTime);
-  // cudaErrCheck(cudaDeviceSynchronize());
-
-
-
   
-  // LSTM_scheduler scheduler(hiddenSize,miniBatch,seqLength,numLayers,inputSize);
 
+  // cudaErrCheck(cudaEventDestroy(global_start));
+  // cudaErrCheck(cudaEventDestroy(global_end));
+  cudaErrCheck(cudaEventElapsedTime(&elapsedTime, global_start, run_start));
+  printf("Initialize time used %f ms\n", elapsedTime);
 
-  // scheduler.init();
-  // printf("Initialize success\n");
-
-  // cudaEvent_t global_start, global_end;
-  // cudaErrCheck(cudaEventCreate(&global_start));
-  // cudaErrCheck(cudaEventCreate(&global_end));
-
-  // cudaErrCheck(cudaEventRecord(global_start));
-  // scheduler.Forward(&loss);
-  // printf("Forward loss is %f\n", loss);
-
-
-  // // if (checkF) {
-  // //   scheduler.printChecksum();
-  // // }
-
-
-  // for (int i = 0; i < 10; i++) {
-  //   if (TRAINING) {
-  //     // scheduler.clearStates();
-  //     elapsedTime = scheduler.Backward(0.2);
-  //     printf("Backward time is %f\n", elapsedTime);
-  //   }
-
-  //   // scheduler.printWeight();
-
-  //   // // Timing starts here
-    
-  //   elapsedTime = scheduler.Forward(&loss);
-  //   printf("Forward time is %f, loss is %f\n", elapsedTime, loss);
-  // }
-  // // We're done. Print some checksums
-  // // if (checkF) {
-  // //   scheduler.printChecksum();
-  // // }
-  // cudaErrCheck(cudaEventRecord(global_end));
-  // cudaErrCheck(cudaEventSynchronize(global_end));
-  // cudaErrCheck(cudaEventElapsedTime(&elapsedTime, global_start, global_end));
+  cudaErrCheck(cudaEventElapsedTime(&elapsedTime, run_end, global_end));
+  printf("Memory free time used %f ms\n", elapsedTime);
   
-  // cudaErrCheck(cudaDeviceSynchronize());
-  
-  // printf("Total time used %f ms\n", elapsedTime);
-
-  // scheduler.freeMemory();
 
   return 0;
 }
-
-  
-
-//   return 0;
-// }
 
 
 int main(int argc, char* argv[]) {

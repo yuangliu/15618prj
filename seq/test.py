@@ -11,9 +11,9 @@ class ToyLossLayer:
     """
     @classmethod
     def loss(self, pred, label):
-        s = 0.0
-        for p in pred:
-            s += p
+        #s = 0.0
+        #for p in pred:
+        #    s += p
         #return s
         return (pred[0] - label[0]) ** 2
 
@@ -271,9 +271,9 @@ def example_4_multi(argv):
     layer = int(argv[2].strip())
     tt = int(argv[1].strip())
     eg = int(argv[4].strip())
-    lstm_param = LstmParamPeephole(mem_cell_ct, x_dim) 
-    lstm_hidden_param = LstmParamPeephole(mem_cell_ct, mem_cell_ct) 
-    lstm_net = LstmNetwork(lstm_param, lstm_hidden_param, layer, peephole=True)
+    lstm_param = LstmParam(mem_cell_ct, x_dim) 
+    lstm_hidden_param = LstmParam(mem_cell_ct, mem_cell_ct) 
+    lstm_net = LstmNetwork(lstm_param, lstm_hidden_param, layer, peephole=False)
     x_examples = [0.2 for i in range(eg*tt*x_dim)]
     y_examples = [1 for i in range(eg*tt*x_dim)]
 
@@ -295,7 +295,7 @@ def example_4_multi(argv):
             lstm_net.x_list_clear()
 
         #print("loss: " + str(loss))
-        lstm_net.apply_diff(0.2)
+        lstm_net.apply_diff(0.001)
         if epoch == 0 or epoch == 9 or epoch == 99 or epoch == 999:
             end = time.time()
             print "SEQ\tEpoch\t%d\tTime\t%f" % (epoch+1, (end - start)*1000)

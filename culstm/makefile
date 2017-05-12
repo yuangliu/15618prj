@@ -5,3 +5,4 @@ all:
 clean: 
 	@rm *.pyc
 	@rm *.cu
+	@rm LSTM

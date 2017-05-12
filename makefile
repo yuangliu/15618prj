@@ -4,7 +4,7 @@ O=32
 B=64
 I=32
 
-all: init seqlstm tflstm cu
+demo: init seqlstm tflstm cu
 
 init:
 	@echo "T $T L $L O $O B $B I $I" > res.txt
@@ -24,7 +24,4 @@ clean:
 	@cd ..
 	@cd tf
 	@rm -f *.pyc
-	@cd ..
-	@cd rnn
-	@make clean
 	@cd ..
