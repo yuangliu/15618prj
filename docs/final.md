@@ -30,6 +30,27 @@ The training for LSTM involves a series of _matrix-matrix multiplications_ (GEMM
 
 ## Approaches
 <!--Tell us how your implementation works. Your description should be sufficiently detailed to provide the course staff a basic understanding of your approach. Again, it might be very useful to include a figure here illustrating components of the system and/or their mapping to parallel hardware.-->
+### Code Auto-generation
+The following code shows an example of our CuLSTM interface. It defines a LSTM network in just a few lines of code. This code will call CuLSTM library, which will assemble CUDA code blocks as well as parameters. Finally, a CUDA file will be generated and is ready be ran on GPU.
+```scala
+lstm_input = LstmInput(inputSize, seqLength)
+lstm_output = LstmOutput(hiddenSize, seqLength)
+lstm_config = LstmConfig(inputSize, hiddenSize, numLayers, seqLength, miniBatch, Peepholes=False)
+lstm_net = LstmNetwork(lstm_config)
+lstm_net.run(lstm_input, lstm_output)
+lstm_net.clean()
+```
+
+Our interfaces support a wide area of specification. Here is a list of customized functions:
+
+| Category | Functions |
+| :--- | :--- |
+|Input/Label data|Padding, mask on label|
+|Configuration|Input size, hidden size, sequence length, mini-batch size, number of layers|
+|Node definition|8+ LSTM variants, user-defined activation function|
+|Network specification|Loss function|
+
+### Optimizations for Back-propagation
 Our optimization approaches are mainly inspired by the forward propagation  implementation of [Jeremy Appleyard](https://devblogs.nvidia.com/parallelforall/optimizing-recurrent-neural-networks-cudnn-5/). We will illustrate how these optimization ideas are applied in our back-propagation implementation.
 
 Before we start, here are some parameters used in our program:
@@ -40,7 +61,7 @@ Before we start, here are some parameters used in our program:
 - Input size: The dimension of input data
 - Peephole: Use Peephole LSTM or not
 
-### Step 1: Optimizing a Single Iteration
+#### Step 1: Optimizing a Single Iteration
 The back-propagation process of each iteration includes a series of point-wise operations:
 
 $$\begin{aligned}
@@ -67,10 +88,10 @@ $$\begin{aligned}
 
 As illustrated in the above equations, the back-propagation process has stronger recurrent dependencies since $$\delta y_t$$ is relied on the $$\delta i_{t+1},\delta f_{t+1}, \delta o_{t+1},  \delta z_{t+1}$$ from the previous iteration as well as $$\Delta_t = \delta x_t$$ from the upper layer. Therefore, the propagation of deltas needs to be performed iteration by iteration.
 
-#### Optimization 1: Fusing Point-wise Operations
+##### Optimization 1: Fusing Point-wise Operations
 To improve arithmetic density, we fused all point-wise operations together into one kernel with $$\text{hiddenSize}\times \text{miniBatch}$$ threads. The calculation of peephole gradients are also performed inside. To avoid updating to the same memory address, we tradeoff memory for efficiency by allocating totally $$3  \times\text{hiddenSize}\times \text{miniBatch}$$ space for $$\delta p_\star$$. After the point-wise operation, **cublasSgemv** is used to aggregate all the gradients together.
 
-#### Optimization 2: Combining GEMM Operations
+##### Optimization 2: Combining GEMM Operations
 Originally, $$W_\star$$ and $$R_\star$$ together require eight GEMMs to be calculated. By aggregating $$\delta_\star$$ into one matrix $$S$$ with size of $$4\times \text{hiddenSize} \times \text{miniBatch}$$, only two GEMMs (i.e. $$W^TS$$ and $$R^TS$$) are needed.
 
 
@@ -85,9 +106,9 @@ for layer in layers:
 perform the weights updates
 ```
 
-### Step 2: Optimizing with Each Layer
+#### Step 2: Optimizing with Each Layer
 
-#### Optimization 3: Group Weight Updates
+##### Optimization 3: Group Weight Updates
 The weight updates are heavy if performed in a accumulated way. Also, it requires extra memory allocation to store the temporary gradient. By grouping the weight updates process, a larger matrix can be used in each iteration and no extra memory is needed. The optimized pseudo-code follows.
 ```c++
 for layer in layers:
@@ -99,7 +120,7 @@ for layer in layers:
     perform the weights updates
 ```
 
-#### Optimization 4: Combining GEMMs
+##### Optimization 4: Combining GEMMs
 Grouping 2 iterations to update $$\delta x$$ can achieve a significant performance gain with 1.24x speedup with large network setting in back-propagation. The revised pseudo-code follows.
 ```c++
 for layer in layers:
@@ -112,9 +133,9 @@ for layer in layers:
   if end of layer:
     perform the weights updates
 ```
-### Step 3: Optimizing with Many Layers
+#### Step 3: Optimizing with Many Layers
 
-#### Optimization 5: Streaming
+##### Optimization 5: Streaming
 The back-propagation dependencies can be seen from Fig. 2, where the red cells are independent with each other. Ideally, $$layer$$ iterations can run concurrently, meaning that the LSTM networks with more layers have more parallelism to exploit.
 
 <img src="image06.png" style="background-color:#0;"/>  
@@ -124,9 +145,9 @@ We have created  $$layer$$ asynchronous cuda streams and set the GEMMS and eleme
 
 
 
-## Partial Results
+## Experiment Results
 <!--How successful were you at achieving your goals? We expect results sections to differ from project to project, but we expect your evaluation to be very thorough (your project evaluation is a great way to demonstrate you understood topics from this course).-->
-### Comparison with Sequential Version and TensorFlow
+We did experiments on GHC machines with NVIDIA GeForce GTX 1080 GPU. We used three sizes of LSTM networks, which are shown below:
 
 | Parameters | Small | Medium | Large |
 | :--- | :--- | :--- | :--- |
@@ -137,6 +158,9 @@ We have created  $$layer$$ asynchronous cuda streams and set the GEMMS and eleme
 | Input size | 10 | 32 | 512 |
 | Peephole | Y | Y | Y |
 
+### Comparison with Sequential Version and TensorFlow
+
+We compared the performance of CuLSTM with a sequential implementation in Python and TensorFlow using CuDNN library. Figure 3 shows the experiment result, which means the cumulative training time for 1 - 1,000 iterations. We can see that our implementation outperforms the sequential one for more than 1,000x, and also has a 3x speed up compared to TensorFlow for large network. Another observation is that sequential code is the best in the first iteration for smaller network. It is due to the initialization and memory copy overhead of GPU, which will be amortized among iterations.
 
 <img src="comp2.png" style="background-color:#666;"/>  
 **(a)** *Small network. (log-log)*  
@@ -147,6 +171,7 @@ We have created  $$layer$$ asynchronous cuda streams and set the GEMMS and eleme
 **Figure 3:** *Comparison with sequential code and TensorFlow. (ms)*
 
 ### Training Time
+Figure 4 shows the forward and backward cost of trainings in each iteration on a large network. Back-propagation used a relatively more time, which is because the dependency is more complex than forward propagation.
 
 <img src="train.png" style="background-color:#666;"/>  
 **Figure 4:** *Forward and backward cost. (ms)*
@@ -160,9 +185,11 @@ Data movement is a main source of time and energy cost for GPU applications. We 
 **(b)** *1,000 iterations.*  
 **Figure 5:** *Cost of data movement. (ms)*
 
-### Final Numbers to be Shown
-- Performance comparison against tensorflow/sequential implementations with LSTM variants (NOG, NFG, NIG, NIAF, NOAF, CIFG).
-- Optimization breakdown vs. the baseline code.
+### LSTM Variants
+Figure 5 shows the performance of different LSTM variants. We supported 8 variants in total. Vanilla LSTM contains all components in the nodes, and other variants are a subset of it. From the figure, we can see that their running time is less than vanilla LSTM, since we optimized memory and computation cost of each variant.
+
+<img src="variant.png" style="background-color:#666;"/>  
+**Figure 5:** *Running time of LSTM variants. (ms)*
 
 
 ## References
