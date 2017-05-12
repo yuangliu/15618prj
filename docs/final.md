@@ -88,8 +88,12 @@ $$\begin{aligned}
 
 As illustrated in the above equations, the back-propagation process has stronger recurrent dependencies since $$\delta y_t$$ is relied on the $$\delta i_{t+1},\delta f_{t+1}, \delta o_{t+1},  \delta z_{t+1}$$ from the previous iteration as well as $$\Delta_t = \delta x_t$$ from the upper layer. Therefore, the propagation of deltas needs to be performed iteration by iteration.
 
-##### Optimization 1: Fusing Point-wise Operations
-To improve arithmetic density, we fused all point-wise operations together into one kernel with $$\text{hiddenSize}\times \text{miniBatch}$$ threads. The calculation of peephole gradients are also performed inside. To avoid updating to the same memory address, we tradeoff memory for efficiency by allocating totally $$3  \times\text{hiddenSize}\times \text{miniBatch}$$ space for $$\delta p_\star$$. After the point-wise operation, **cublasSgemv** is used to aggregate all the gradients together.
+
+#### Optimization 1: Fusing Point-wise Operations
+To improve arithmetic density, we fused all point-wise operations together into one kernel with **hiddenSize x miniBatch** threads. The calculation of peephole gradients are also performed inside.
+
+We also perform peephole gradients calculation here. To avoid false sharing, we tradeoff memory for efficiency by allocating totally **3 x hiddenSize x miniBatch** space for $$\delta p_\star$$. After the point-wise operations, **cublasSgemv** is used to aggregate all the gradients together.
+
 
 ##### Optimization 2: Combining GEMM Operations
 Originally, $$W_\star$$ and $$R_\star$$ together require eight GEMMs to be calculated. By aggregating $$\delta_\star$$ into one matrix $$S$$ with size of $$4\times \text{hiddenSize} \times \text{miniBatch}$$, only two GEMMs (i.e. $$W^TS$$ and $$R^TS$$) are needed.
@@ -121,7 +125,7 @@ for layer in layers:
 ```
 
 ##### Optimization 4: Combining GEMMs
-Grouping 2 iterations to update $$\delta x$$ can achieve a significant performance gain with 1.24x speedup with large network setting in back-propagation. The revised pseudo-code follows.
+The revised pseudo-code follows.
 ```c++
 for layer in layers:
   for iteration in iterations:
@@ -136,7 +140,7 @@ for layer in layers:
 #### Step 3: Optimizing with Many Layers
 
 ##### Optimization 5: Streaming
-The back-propagation dependencies can be seen from Fig. 2, where the red cells are independent with each other. Ideally, $$layer$$ iterations can run concurrently, meaning that the LSTM networks with more layers have more parallelism to exploit.
+The back-propagation dependencies can be seen from Fig. 2, where the red cells are independent with each other. Ideally, **numLayer** iterations can run concurrently, meaning that the LSTM networks with more layers have more parallelism to exploit.
 
 <img src="image06.png" style="background-color:#0;"/>  
 **Figure 2:** *Back-propagation dependencies*
@@ -145,7 +149,38 @@ We have created  $$layer$$ asynchronous cuda streams and set the GEMMS and eleme
 
 
 
+
 ## Experiment Results
+
+
+### Optimization breakdown
+| Optimization | Runtime(ms) | Speedup |
+| :--- | :---: | :---: |
+|Baseline |159.0|1.0x|
+|Combined GEMMs |108.4|1.46x|
+|Streaming|76.7 |2.07x|
+|Batched Gradient|107.8|1.47x|
+|Altogether|47.7|3.96x|
+**Table 1:** *Optimization speedup against the baseline code*
+
+Table 1. shows the speedup of optimizations by comparing the average back-propagation runtime with the baseline implementation experimenting on a large LSTM network containing 4 layers, 100 sequences and 512 hidden dimensions. Notice that The baseline code is the implementation without these three optimizations with many optimizations already applied.
+
+The streaming method alone can generate approximately 2x speedup and can provide a total speedup of 3.96x when three of optimizations all applied.
+### Parameter Tuning
+In our batched gradient propagation, the larger batch size can form a larger matrix as the input in GEMM and therefore can have a  better utilization of the GPU computability and have a lower amortized kernel launch cost.
+
+However, larger batch size will also cause greater interference on the propagation to the next level. So, there exists a tradeoff regarding the choice of batch size.
+
+
+
+<img src="batch.png" style="background-color:#666;"/>  
+**Figure 3:** *Speedup trend with increasing batch size*
+
+As shown in the Figure 3, we experiment increasing batch size with two LSTM networks with different scale and find out that 2 works best for small network (sequence length = 20, hidden size = 64) and the increasing batch size will always perform better for the large network setting (sequence length = 100, hidden size = 512).  
+<!-- With our experiment, 2 works best for small network and 7 works the best for large network.  -->
+
+
+>>>>>>> Stashed changes
 <!--How successful were you at achieving your goals? We expect results sections to differ from project to project, but we expect your evaluation to be very thorough (your project evaluation is a great way to demonstrate you understood topics from this course).-->
 We did experiments on GHC machines with NVIDIA GeForce GTX 1080 GPU. We used three sizes of LSTM networks, which are shown below:
 
@@ -185,11 +220,16 @@ Data movement is a main source of time and energy cost for GPU applications. We 
 **(b)** *1,000 iterations.*  
 **Figure 5:** *Cost of data movement. (ms)*
 
+<<<<<<< Updated upstream
 ### LSTM Variants
 Figure 5 shows the performance of different LSTM variants. We supported 8 variants in total. Vanilla LSTM contains all components in the nodes, and other variants are a subset of it. From the figure, we can see that their running time is less than vanilla LSTM, since we optimized memory and computation cost of each variant.
 
 <img src="variant.png" style="background-color:#666;"/>  
 **Figure 5:** *Running time of LSTM variants. (ms)*
+=======
+### Final Numbers to be Shown
+- Performance comparison against tensorflow/sequential implementations with LSTM variants (NOG, NFG, NIG, NIAF, NOAF, CIFG).
+>>>>>>> Stashed changes
 
 
 ## References
