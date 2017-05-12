@@ -7,7 +7,7 @@ layout: null
 ## Summary
 <!--A short (no more than a paragraph) project summary. If applicable, the summary should list your project deliverables (including what you plan to show at the parallelism competition) and what machines they ran on.-->
 
-In this project, we implemented **CuLSTM**, a _Domain-Specific Language_ (DSL) for _Long Short-Term Memory_ (LSTM). The DSL is able to generate CUDA code based on LSTM network definition and specification in Python. CuLSTM supports multiple LSTM variants, and allows great flexibility, such as user-defined loss function and parameters. The outcome is a **productive** Python interface, as well as a **performant** program running on GPU. The evaluations on GHC machines (with NVIDIA GeForce GTX 1080) showed that our implementation achieved a **268x** speedup compared to the sequential version, and a **25x** speedup compared to TensorFlow running on GPU.
+In this project, we implemented **CuLSTM**, a _Domain-Specific Language_ (DSL) for _Long Short-Term Memory_ (LSTM). The DSL is able to generate CUDA code based on LSTM network definition and specification in Python. CuLSTM supports multiple LSTM variants, and allows great flexibility, such as user-defined loss function and parameters. The outcome is a **productive** Python interface, as well as a **performant** program running on GPU. The evaluations on GHC machines (with NVIDIA GeForce GTX 1080) showed that our implementation achieved a **>1000x** speedup compared to the sequential version, and a **3x** speedup compared to TensorFlow running on GPU.
 
 ## Background
 <!--Describe the algorithm, application, or system you parallelized in computer science terms. (Recall our discussion from the last day of class.) Figure(s) would be really useful here.-->
@@ -130,19 +130,19 @@ We have created  $$layer$$ asynchronous cuda streams and set the GEMMS and eleme
 
 | Parameters | Small | Medium | Large |
 | :--- | :--- | :--- | :--- |
-| Sequence length | 1 | 10 | 20 |
-| Network layer | 1 | 2 | 4 |
-| Hidden size | 1 | 10 | 32 |
-| Mini-batch size | 1 | 10 | 64 |
-| Input size | 1 | 10 | 32 |
+| Sequence length | 10 | 20 | 100 |
+| Network layer | 2 | 4 | 4 |
+| Hidden size | 10 | 32 | 512 |
+| Mini-batch size | 10 | 64 | 64 |
+| Input size | 10 | 32 | 512 |
 | Peephole | Y | Y | Y |
 
 
-<img src="comp1.png" style="background-color:#666;"/>  
-**(a)** *Small network.*  
 <img src="comp2.png" style="background-color:#666;"/>  
-**(b)** *Medium network. (log-log)*  
+**(a)** *Small network. (log-log)*  
 <img src="comp3.png" style="background-color:#666;"/>  
+**(b)** *Medium network. (log-log)*  
+<img src="comp4.png" style="background-color:#666;"/>  
 **(c)** *Large network. (log-log)*  
 **Figure 3:** *Comparison with sequential code and TensorFlow. (ms)*
 
