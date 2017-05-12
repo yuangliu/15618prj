@@ -144,7 +144,7 @@ for layer in layers:
 #### Step 3: Optimizing with Many Layers
 
 ##### Optimization 5: Streaming
-The back-propagation dependencies can be seen from Fig. 2, LSTM nodes lie on the diagonal direction are independent with each other as shown as the red cells. Ideally, **numLayer** iterations can run concurrently, meaning that the LSTM networks with more layers have more parallelism to exploit.
+The back-propagation dependencies can be seen from Figure 2, LSTM nodes lie on the diagonal direction are independent with each other as shown as the red cells. Ideally, **numLayer** iterations can run concurrently, meaning that the LSTM networks with more layers have more parallelism to exploit.
 
 <img src="image06.png" style="background-color:#0;"/>  
 **Figure 2:** *Back-propagation dependencies*
@@ -167,7 +167,10 @@ We did experiments on GHC machines with NVIDIA GeForce GTX 1080 GPU. We used thr
 | Mini-batch size | 10 | 64 | 64 |
 | Input size | 10 | 32 | 512 |
 | Peephole | Y | Y | Y |
+**Table 1:** *LSTM network settings*
+
 ### Optimization breakdown
+
 | Optimization | Runtime(ms) | Speedup |
 | :--- | :---: | :---: |
 |Baseline |159.0|1.0x|
@@ -175,9 +178,9 @@ We did experiments on GHC machines with NVIDIA GeForce GTX 1080 GPU. We used thr
 |Streaming|76.7 |2.07x|
 |Batched Gradient|107.8|1.47x|
 |Altogether|47.7|3.96x|
-**Table 1:** *Optimization speedup against the baseline code*
+**Table 2:** *Optimization speedup against the baseline code*
 
-Table 1. shows the speedup of optimizations by comparing the average back-propagation runtime with the baseline implementation experimenting on a large LSTM network containing 4 layers, 100 sequences and 512 hidden dimensions. Notice that The baseline code is the implementation without these three optimizations with many optimizations already applied.
+Table 2. shows the speedup of optimizations by comparing the average back-propagation runtime with the baseline implementation experimenting on a large LSTM network containing 4 layers, 100 sequences and 512 hidden dimensions. Notice that The baseline code is the implementation without these three optimizations with many optimizations already applied.
 
 The streaming method alone can generate approximately 2x speedup and can provide a total speedup of 3.96x when three of optimizations all applied.
 ### Parameter Tuning
@@ -200,7 +203,7 @@ As shown in the Figure 3, we experiment increasing batch size with two LSTM netw
 
 ### Comparison with Sequential Version and TensorFlow
 
-We compared the performance of CuLSTM with a sequential implementation in Python and TensorFlow using CuDNN library. Figure 3 shows the experiment result, which means the cumulative training time for 1 - 1,000 iterations. We can see that our implementation outperforms the sequential one for more than 1,000x, and also has a 3x speed up compared to TensorFlow for large network. Another observation is that sequential code is the best in the first iteration for smaller network. It is due to the initialization and memory copy overhead of GPU, which will be amortized among iterations.
+We compared the performance of CuLSTM with a sequential implementation in Python and TensorFlow using CuDNN library. Figure 4 shows the experiment result, which means the cumulative training time for 1 ~ 1,000 iterations. We can see that our implementation outperforms the sequential one for more than 1,000x, and also has a 3x speed up compared to TensorFlow for large network. Another observation is that sequential code is the best in the first iteration for smaller network. It is due to the initialization and memory copy overhead of GPU, which will be amortized among iterations.
 
 <img src="comp2.png" style="background-color:#666;"/>  
 **(a)** *Small network. (log-log)*  
@@ -208,29 +211,29 @@ We compared the performance of CuLSTM with a sequential implementation in Python
 **(b)** *Medium network. (log-log)*  
 <img src="comp4.png" style="background-color:#666;"/>  
 **(c)** *Large network. (log-log)*  
-**Figure 3:** *Comparison with sequential code and TensorFlow. (ms)*
+**Figure 4:** *Comparison with sequential code and TensorFlow. (ms)*
 
 ### Training Time
-Figure 4 shows the forward and backward cost of trainings in each iteration on a large network. Back-propagation used a relatively more time, which is because the dependency is more complex than forward propagation.
+Figure 5 shows the forward and backward cost of trainings in each iteration on a large network. Back-propagation used a relatively more time, which is because the dependency is more complex than forward propagation.
 
 <img src="train.png" style="background-color:#666;"/>  
-**Figure 4:** *Forward and backward cost. (ms)*
+**Figure 5:** *Forward and backward cost. (ms)*
 
 ### Data Movement Cost
-Data movement is a main source of time and energy cost for GPU applications. We recorded the time of data initialization and memory free on default setting, and showed the result in Fig. 5. The absolute time (in ms) and percentage of each part are shown in the figure. We can see from Fig. 5(a) that, when we train the network for 10 iterations, the cost of initialization is relatively high. However, in Fig. 5(b), as we train for more iterations, it remains constant, and becomes trivial relative to running time.
+Data movement is a main source of time and energy cost for GPU applications. We recorded the time of data initialization and memory free on default setting, and showed the result in Figure 6. The absolute time (in ms) and percentage of each part are shown in the figure. We can see from Figure 6(a) that, when we train the network for 10 iterations, the cost of initialization is relatively high. However, in Figure 6(b), as we train for more iterations, it remains constant, and becomes trivial relative to running time.
 
 <img src="data1.png" style="background-color:#666;"/>  
 **(a)** *10 iterations.*  
 <img src="data2.png" style="background-color:#666;"/>  
 **(b)** *1,000 iterations.*  
-**Figure 5:** *Cost of data movement. (ms)*
+**Figure 6:** *Cost of data movement. (ms)*
 
 
 ### LSTM Variants
-Figure 5 shows the performance of different LSTM variants. We supported 8 variants in total. Vanilla LSTM contains all components in the nodes, and other variants are a subset of it. From the figure, we can see that their running time is less than vanilla LSTM, since we optimized memory and computation cost of each variant.
+Figure 7 shows the performance of different LSTM variants. We supported 8 variants in total. Vanilla LSTM contains all components in the nodes, and other variants are a subset of it. From the figure, we can see that their running time is less than vanilla LSTM, since we optimized memory and computation cost of each variant.
 
 <img src="variant.png" style="background-color:#666;"/>  
-**Figure 5:** *Running time of LSTM variants. (ms)*
+**Figure 7:** *Running time of LSTM variants. (ms)*
 
 
 ## References
