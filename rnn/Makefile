@@ -26,11 +26,9 @@
 
 
 all: LSTM.cu
-	nvcc -o LSTM2 -arch=sm_52 -DPERFOPTS=31 -lcublas -lcurand LSTM2.cu
 	nvcc -o LSTM -arch=sm_52 -DPERFOPTS=31 -lcublas -lcurand LSTM.cu
 
 clean:
 	rm -f LSTM
-	rm -f LSTM2
 
 
