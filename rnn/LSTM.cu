@@ -53,8 +53,6 @@
 #include <cublas_v2.h>
 #include <curand.h>
 
-// Performance is not significantly different, but false saves memory. 
-// False does not work with unfused pointwise ops.
 #define TRAINING (true)
 // #define UPDATE
 // #define PEEPHOLES 
@@ -66,10 +64,9 @@
 #define G_INDEX (2)
 #define O_INDEX (3)
 
-
-// #ifndef PERFOPTS
+ #ifndef PERFOPTS
    #define PERFOPTS (31)
-// #endif
+#endif
 
 #define GROUP_GEMM ((PERFOPTS & 1))
 #define USE_STREAMS ((PERFOPTS & 2))
@@ -1697,7 +1694,7 @@ int main(int argc, char* argv[]) {
   else if (argc == 1) {
     printf("Running with default settings\n");
     inputSize = 512;
-    seqLength = 20;
+    seqLength = 100;
     numLayers = 4;
     hiddenSize = 512;
     miniBatch = 64;
