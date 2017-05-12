@@ -19,10 +19,10 @@ As a _recurrent neural network_ (RNN) architecture, _long short-term memory_ (LS
 Despite similar ideas, different LSTM variants have individual network structures and formulas. Common variants include vanilla LSTM [[Graves 2005](http://www.sciencedirect.com/science/article/pii/S0893608005001206)], traditional LSTM [[Hochreiter 1997](http://www.mitpressjournals.org/doi/abs/10.1162/neco.1997.9.8.1735)], Peephole LSTM [[Gers 2000](http://ieeexplore.ieee.org/abstract/document/861302/)], etc. The following formulas show the operations for traditional LSTM in each iteration.
 
 $$\begin{aligned}
-z_t&=g(W_{c}x_{t}+R_{c}h_{t-1}+b_{c})\\
-f_{t}&=\sigma (W_{f}x_{t}+R_{f}h_{t-1}+p_f\circ c_{t-1}+b_{f})\\
-i_{t}&=\sigma (W_{i}x_{t}+R_{i}h_{t-1}+p_i\circ c_{t-1}+b_{i})\\
-o_{t}&=\sigma (W_{o}x_{t}+R_{o}h_{t-1}+p_o\circ c_{t}+b_{o})\\
+z_t&=g(\mathbf{W}_{c}x_{t}+\mathbf{R}_{c}h_{t-1}+b_{c})\\
+f_{t}&=\sigma (\mathbf{W}_{f}x_{t}+\mathbf{R}_{f}h_{t-1}+p_f\circ c_{t-1}+b_{f})\\
+i_{t}&=\sigma (\mathbf{W}_{i}x_{t}+\mathbf{R}_{i}h_{t-1}+p_i\circ c_{t-1}+b_{i})\\
+o_{t}&=\sigma (\mathbf{W}_{o}x_{t}+\mathbf{R}_{o}h_{t-1}+p_o\circ c_{t}+b_{o})\\
 c_{t}&=f_{t}\circ c_{t-1}+i_{t}\circ z_t\\
 h_{t}&=o_{t}\circ h(c_{t})\end{aligned}$$
 
@@ -54,33 +54,33 @@ Our interfaces support a wide area of specification. Here is a list of customize
 Our optimization approaches are mainly inspired by the forward propagation  implementation of [Jeremy Appleyard](https://devblogs.nvidia.com/parallelforall/optimizing-recurrent-neural-networks-cudnn-5/). We will illustrate how these optimization ideas are applied in our back-propagation implementation.
 
 Before we start, here are some parameters used in our program:
-- Sequence length: The length of time sequences
-- Network layer: The number of LSTM network layers
-- Hidden size: The dimension of hidden layers and output data
-- Mini-batch size: The number of training examples processed in a mini-batch
-- Input size: The dimension of input data
-- Peephole: Use Peephole LSTM or not
+- **Sequence length**: The length of time sequences
+- **Network layer**: The number of LSTM network layers
+- **Hidden size**: The dimension of hidden layers and output data
+- **Mini-batch size**: The number of training examples processed in a mini-batch
+- **Input size**: The dimension of input data
+- **Peephole**: Use Peephole LSTM or not
 
 #### Step 1: Optimizing a Single Iteration
 The back-propagation process of each iteration includes a series of point-wise operations:
 
 $$\begin{aligned}
-\delta y_t &= \Delta_t + R_z\delta z_{t+1} + R_i\delta i_{t+1} + R_f\delta f_{t+1} + R_o\delta o_{t+1}\\ \delta o_{t}& \propto \delta y_{t}\quad
+\delta y_t &= \Delta_t + \mathbf{R}_z^T\delta z_{t+1} + \mathbf{R}_i^T\delta i_{t+1} + \mathbf{R}_f^T\delta f_{t+1} + \mathbf{R}_o^T\delta o_{t+1}\\ \big[ &\delta o_{t}, \delta f_{t}, \delta z_{t},\delta i_{t}\big] \propto \delta y_{t}
+\end{aligned}$$
+<!-- \quad
 \delta f_{t} \propto \delta y_{t}\quad
 \delta i_{t} \propto \delta y_{t}\quad
-\delta z_{t} \propto \delta y_{t}\\
-\end{aligned}$$
-
+\delta z_{t} \propto \delta y_{t}\\ -->
 If the cell is not belonged to a base layer, it needs to calculate the delta of the next layer as
 
-$$\delta x_t = W_z\delta z_{t} + W_i\delta z_{t} + W_f\delta f_{t} + W_o\delta o_{t}$$
+$$\delta x_t = \mathbf{W}_z^T\delta z_{t} + \mathbf{W}_i^T\delta z_{t} + \mathbf{W}_f^T\delta f_{t} + \mathbf{W}_o^T\delta o_{t}$$
 
 Finally, the gradients for weights are calculated as
 
 $$\begin{aligned}
-\delta W_{\star} &= \sum\nolimits^T_{t=0} \langle \delta\star_t,x_t\rangle&
+\delta \mathbf{W}_{\star} &= \sum\nolimits^T_{t=0} \langle \delta\star_t,x_t\rangle&
 \delta p_{f} &= \sum\nolimits^{T-1}_{t=0} c_t \circ \delta f_{t+1}\\
-\delta R_{\star} &= \sum\nolimits^{T-1}_{t=0} \langle \delta\star_{t+1},y_t\rangle&
+\delta \mathbf{R}_{\star} &= \sum\nolimits^{T-1}_{t=0} \langle \delta\star_{t+1},y_t\rangle&
 \delta p_{i} &= \sum\nolimits^{T-1}_{t=0} c_t \circ \delta i_{t+1}\\
 \delta b_{\star} &= \sum\nolimits^{T}_{t=0} \delta\star_{t}&
 \delta p_{o} &= \sum\nolimits^{T}_{t=0} c_t \circ \delta o_{t}\\
@@ -89,14 +89,14 @@ $$\begin{aligned}
 As illustrated in the above equations, the back-propagation process has stronger recurrent dependencies since $$\delta y_t$$ is relied on the $$\delta i_{t+1},\delta f_{t+1}, \delta o_{t+1},  \delta z_{t+1}$$ from the previous iteration as well as $$\Delta_t = \delta x_t$$ from the upper layer. Therefore, the propagation of deltas needs to be performed iteration by iteration.
 
 
-#### Optimization 1: Fusing Point-wise Operations
+##### Optimization 1: Fusing Point-wise Operations
 To improve arithmetic density, we fused all point-wise operations together into one kernel with **hiddenSize x miniBatch** threads. The calculation of peephole gradients are also performed inside.
 
 We also perform peephole gradients calculation here. To avoid false sharing, we tradeoff memory for efficiency by allocating totally **3 x hiddenSize x miniBatch** space for $$\delta p_\star$$. After the point-wise operations, **cublasSgemv** is used to aggregate all the gradients together.
 
 
 ##### Optimization 2: Combining GEMM Operations
-Originally, $$W_\star$$ and $$R_\star$$ together require eight GEMMs to be calculated. By aggregating $$\delta_\star$$ into one matrix $$S$$ with size of $$4\times \text{hiddenSize} \times \text{miniBatch}$$, only two GEMMs (i.e. $$W^TS$$ and $$R^TS$$) are needed.
+Originally, $$\mathbf{W}_\star$$ and $$\mathbf{R}_\star$$ together require eight GEMMs to be calculated. By aggregating $$\delta_\star$$ into one matrix $$S$$ with size of $$4\times \text{hiddenSize} \times \text{miniBatch}$$, only two GEMMs (i.e. $$W^TS$$ and $$R^TS$$) are needed.
 
 
 By using the above two optimizations, the delta propagation part for each iteration contains only one point-wise operation and two GEMMs. Pseudo-code for the method follows.
@@ -152,7 +152,17 @@ We have created  $$layer$$ asynchronous cuda streams and set the GEMMS and eleme
 
 ## Experiment Results
 
+### Settings
+We did experiments on GHC machines with NVIDIA GeForce GTX 1080 GPU. We used three sizes of LSTM networks, which are shown below:
 
+| Parameters | Small | Medium | Large |
+| :--- | :---: | :---: | :---: |
+| Sequence length | 10 | 20 | 100 |
+| Network layer | 2 | 4 | 4 |
+| Hidden size | 10 | 32 | 512 |
+| Mini-batch size | 10 | 64 | 64 |
+| Input size | 10 | 32 | 512 |
+| Peephole | Y | Y | Y |
 ### Optimization breakdown
 | Optimization | Runtime(ms) | Speedup |
 | :--- | :---: | :---: |
@@ -180,18 +190,9 @@ As shown in the Figure 3, we experiment increasing batch size with two LSTM netw
 <!-- With our experiment, 2 works best for small network and 7 works the best for large network.  -->
 
 
->>>>>>> Stashed changes
-<!--How successful were you at achieving your goals? We expect results sections to differ from project to project, but we expect your evaluation to be very thorough (your project evaluation is a great way to demonstrate you understood topics from this course).-->
-We did experiments on GHC machines with NVIDIA GeForce GTX 1080 GPU. We used three sizes of LSTM networks, which are shown below:
 
-| Parameters | Small | Medium | Large |
-| :--- | :--- | :--- | :--- |
-| Sequence length | 10 | 20 | 100 |
-| Network layer | 2 | 4 | 4 |
-| Hidden size | 10 | 32 | 512 |
-| Mini-batch size | 10 | 64 | 64 |
-| Input size | 10 | 32 | 512 |
-| Peephole | Y | Y | Y |
+<!--How successful were you at achieving your goals? We expect results sections to differ from project to project, but we expect your evaluation to be very thorough (your project evaluation is a great way to demonstrate you understood topics from this course).-->
+
 
 ### Comparison with Sequential Version and TensorFlow
 
@@ -220,16 +221,12 @@ Data movement is a main source of time and energy cost for GPU applications. We 
 **(b)** *1,000 iterations.*  
 **Figure 5:** *Cost of data movement. (ms)*
 
-<<<<<<< Updated upstream
+
 ### LSTM Variants
 Figure 5 shows the performance of different LSTM variants. We supported 8 variants in total. Vanilla LSTM contains all components in the nodes, and other variants are a subset of it. From the figure, we can see that their running time is less than vanilla LSTM, since we optimized memory and computation cost of each variant.
 
 <img src="variant.png" style="background-color:#666;"/>  
 **Figure 5:** *Running time of LSTM variants. (ms)*
-=======
-### Final Numbers to be Shown
-- Performance comparison against tensorflow/sequential implementations with LSTM variants (NOG, NFG, NIG, NIAF, NOAF, CIFG).
->>>>>>> Stashed changes
 
 
 ## References
